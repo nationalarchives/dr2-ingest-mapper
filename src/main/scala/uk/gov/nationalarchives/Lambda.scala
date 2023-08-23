@@ -51,7 +51,7 @@ class Lambda extends RequestStreamHandler {
       fileMetadata <- metadataService.parseCsvWithHeaders[FileMetadata](input, "file-metadata.csv")
       bagManifests <- metadataService.parseCsvWithoutHeaders[BagitManifest](input, "manifest-sha256.txt")
       entries <- metadataService.metadataToDynamoTables(input.batchId, departmentAndSeries, folderMetadata ++ assetMetadata ++ fileMetadata, bagManifests)
-      _ <- dynamo.putItems(config.dynamoTableName, entries)
+      _ <- dynamo.writeItems(config.dynamoTableName, entries)
     } yield {
       val folderMetadataIds: List[UUID] = folderMetadata.filter(fm => fm.title != fm.name).map(_.identifier)
       val departmentSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
