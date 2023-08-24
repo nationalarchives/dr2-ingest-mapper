@@ -229,7 +229,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     tableRequestItems.length should equal(6)
     checkDynamoItems(DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", "Folder", "Test Title A", "TestDescriptionA"))
     checkDynamoItems(DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", "Folder", "Test Title A 1", "TestDescriptionA 1"))
-    checkDynamoItems(DynamoTable("TEST", folderIdentifier, s"${uuids.head}/${uuids.tail.head}/", "TestName", "Folder", "TestTitle", ""))
+    checkDynamoItems(DynamoTable("TEST", folderIdentifier, s"${uuids.head}/${uuids.tail.head}", "TestName", "Folder", "TestTitle", ""))
     checkDynamoItems(DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetTitle", "Asset", "", ""))
     checkDynamoItems(
       DynamoTable("TEST", docxIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier/$assetIdentifier", "Test.docx", "File", "TestTitle", "", Option(1))

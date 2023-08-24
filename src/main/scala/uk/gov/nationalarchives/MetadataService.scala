@@ -60,7 +60,8 @@ class MetadataService(s3: DAS3Client[IO]) {
               name.split("\\.").lastOption
             )
           case FolderMetadata(identifier, parentPath, name, title) =>
-            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", name, "Folder", title, "")
+            val path = if (parentPath.isEmpty) pathPrefix else s"$pathPrefix/${parentPath.stripPrefix("/")}"
+            DynamoTable(batchId, identifier, path, name, "Folder", title, "")
         } ++ departmentAndSeries.series.toList
 
     }

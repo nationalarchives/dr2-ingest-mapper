@@ -151,7 +151,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       seriesIdOpt.map(seriesId =>
         checkTableRows(List(seriesId), 1, DynamoTable(batchId, seriesId, departmentId.toString, "series", "Folder", "series Title", "series Description"))
       )
-      checkTableRows(List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix/", folderMetadata.head.name, "Folder", folderMetadata.head.title, ""))
+      checkTableRows(List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix", folderMetadata.head.name, "Folder", folderMetadata.head.title, ""))
       checkTableRows(List(assetId), 1, DynamoTable(batchId, assetId, s"$prefix/$folderId", assetMetadata.head.title, "Asset", "", ""))
       checkTableRows(
         List(fileIdOne),
