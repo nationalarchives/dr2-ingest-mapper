@@ -70,18 +70,10 @@ class MetadataService(s3: DAS3Client[IO]) {
   }
 }
 object MetadataService {
-  sealed trait Type {
-    def value: String
-  }
-  case class Folder() extends Type {
-    override def value: String = "Folder"
-  }
-  case class Asset() extends Type {
-    override def value: String = "Asset"
-  }
-  case class File() extends Type {
-    override def value: String = "File"
-  }
+  sealed trait Type
+  case class Folder() extends Type
+  case class Asset() extends Type
+  case class File() extends Type
 
   sealed trait Metadata {
     def identifier: UUID

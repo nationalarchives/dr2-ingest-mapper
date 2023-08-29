@@ -47,7 +47,7 @@ class Lambda extends RequestStreamHandler {
       case "File"     => Right(File())
       case typeString => Left(TypeCoercionError(new Exception(s"Type $typeString not found")))
     },
-    typeCaseClass => typeCaseClass.value
+    typeCaseClass => typeCaseClass.getClass.getSimpleName
   )
 
   implicit val dynamoTableFormat: Typeclass[DynamoTable] = deriveDynamoFormat[DynamoTable]
