@@ -18,7 +18,7 @@ import javax.xml.transform.stream.{StreamResult, StreamSource}
 import scala.xml.XML
 
 class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Streams[IO]], randomUuidGenerator: () => UUID) {
-  private val folder = Folder()
+  private val folder = Folder
 
   private def stripHtmlFromDiscoveryResponse(discoveryAsset: DiscoveryCollectionAsset) = {
     val resources = for {

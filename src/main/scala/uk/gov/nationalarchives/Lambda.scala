@@ -5,8 +5,9 @@ import cats.effect.unsafe.implicits.global
 import com.amazonaws.services.lambda.runtime.{Context, RequestStreamHandler}
 import fs2.data.csv._
 import fs2.data.csv.generic.semiauto._
-import org.scanamo.generic.semiauto._
 import org.scanamo.{DynamoFormat, TypeCoercionError}
+import org.scanamo.generic.semiauto._
+//import org.scanamo.{DynamoFormat, TypeCoercionError}
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
@@ -42,12 +43,12 @@ class Lambda extends RequestStreamHandler {
 
   implicit val typeFormat: Typeclass[Type] = DynamoFormat.xmap[Type, String](
     {
-      case "Folder"   => Right(Folder())
-      case "Asset"    => Right(Asset())
-      case "File"     => Right(File())
+      case "Folder"   => Right(Folder)
+      case "Asset"    => Right(Asset)
+      case "File"     => Right(File)
       case typeString => Left(TypeCoercionError(new Exception(s"Type $typeString not found")))
     },
-    typeCaseClass => typeCaseClass.getClass.getSimpleName
+    typeObject => typeObject.toString
   )
 
   implicit val dynamoTableFormat: Typeclass[DynamoTable] = deriveDynamoFormat[DynamoTable]
@@ -66,7 +67,8 @@ class Lambda extends RequestStreamHandler {
       entries <- metadataService.metadataToDynamoTables(input.batchId, departmentAndSeries, folderMetadata ++ assetMetadata ++ fileMetadata, bagManifests)
       _ <- dynamo.writeItems(config.dynamoTableName, entries)
     } yield {
-      val folderMetadataIdsWhereTitleAndNameNotSame: List[UUID] = folderMetadata.filter(fm => fm.title != fm.name).map(_.identifier)
+      folderMetadata.collect { case fm if fm.title != fm.name => fm.identifier }
+      val folderMetadataIdsWhereTitleAndNameNotSame: List[UUID] = folderMetadata.collect { case fm if fm.title != fm.name => fm.identifier }
       val departmentAndSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
 
       val stateData = StateData(
@@ -74,7 +76,7 @@ class Lambda extends RequestStreamHandler {
         input.s3Bucket,
         input.s3Prefix,
         folderMetadataIdsWhereTitleAndNameNotSame ++ departmentAndSeriesIds,
-        folderMetadata.filter(fm => fm.title == fm.name).map(_.identifier),
+        folderMetadata.collect { case fm if fm.title == fm.name => fm.identifier },
         assetMetadata.map(_.identifier)
       )
       outputStream.write(write(stateData).getBytes())

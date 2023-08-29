@@ -60,7 +60,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     table.name should equal(collection)
     table.title should equal(s"Test Title $collection")
     table.batchId should equal("testBatch")
-    table.`type`.value should equal("Folder")
+    table.`type`.toString should equal("Folder")
     table.fileSize.isEmpty should be(true)
     table.parentPath should equal(parentPath)
     table.description should equal(s"TestDescription $collection 1          \nTestDescription $collection 2")

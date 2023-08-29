@@ -47,14 +47,14 @@ class MetadataService(s3: DAS3Client[IO]) {
       departmentAndSeries.department ::
         metadata.map {
           case AssetMetadata(identifier, parentPath, title) =>
-            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", title, Asset(), "", "")
+            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", title, Asset, "", "")
           case FileMetadata(identifier, parentPath, name, fileSize, title) =>
             DynamoTable(
               batchId,
               identifier,
               s"$pathPrefix/${parentPath.stripPrefix("/")}",
               name,
-              File(),
+              File,
               title,
               "",
               Option(fileSize),
@@ -63,17 +63,23 @@ class MetadataService(s3: DAS3Client[IO]) {
             )
           case FolderMetadata(identifier, parentPath, name, title) =>
             val path = if (parentPath.isEmpty) pathPrefix else s"$pathPrefix/${parentPath.stripPrefix("/")}"
-            DynamoTable(batchId, identifier, path, name, Folder(), title, "")
+            DynamoTable(batchId, identifier, path, name, Folder, title, "")
         } ++ departmentAndSeries.series.toList
 
     }
   }
 }
 object MetadataService {
-  sealed trait Type
-  case class Folder() extends Type
-  case class Asset() extends Type
-  case class File() extends Type
+  sealed trait Type {
+    override def toString: String = this match {
+      case Folder => "Folder"
+      case Asset  => "Asset"
+      case File   => "File"
+    }
+  }
+  case object Folder extends Type
+  case object Asset extends Type
+  case object File extends Type
 
   sealed trait Metadata {
     def identifier: UUID

@@ -135,7 +135,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       val s3 = mockS3(testCsvWithHeaders)
 
       def table(id: UUID, tableType: String, parentPath: String) =
-        DynamoTable("batchId", id, parentPath, tableType, Folder(), s"$tableType Title", s"$tableType Description")
+        DynamoTable("batchId", id, parentPath, tableType, Folder, s"$tableType Title", s"$tableType Description")
 
       val batchId = "batchId"
       val folderId = UUID.randomUUID()
@@ -158,12 +158,12 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       result.size should equal(5 + seriesIdOpt.size)
 
       val prefix = s"$departmentId${seriesIdOpt.map(id => s"/$id").getOrElse("")}"
-      checkTableRows(result, List(departmentId), 1, DynamoTable(batchId, departmentId, "", "department", Folder(), "department Title", "department Description"))
+      checkTableRows(result, List(departmentId), 1, DynamoTable(batchId, departmentId, "", "department", Folder, "department Title", "department Description"))
       seriesIdOpt.map(seriesId =>
-        checkTableRows(result, List(seriesId), 1, DynamoTable(batchId, seriesId, departmentId.toString, "series", Folder(), "series Title", "series Description"))
+        checkTableRows(result, List(seriesId), 1, DynamoTable(batchId, seriesId, departmentId.toString, "series", Folder, "series Title", "series Description"))
       )
-      checkTableRows(result, List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix", folderMetadata.head.name, Folder(), folderMetadata.head.title, ""))
-      checkTableRows(result, List(assetId), 1, DynamoTable(batchId, assetId, s"$prefix/$folderId", assetMetadata.head.title, Asset(), "", ""))
+      checkTableRows(result, List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix", folderMetadata.head.name, Folder, folderMetadata.head.title, ""))
+      checkTableRows(result, List(assetId), 1, DynamoTable(batchId, assetId, s"$prefix/$folderId", assetMetadata.head.title, Asset, "", ""))
       checkTableRows(
         result,
         List(fileIdOne),
@@ -173,7 +173,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
           assetId,
           s"$prefix/$folderId/$assetId",
           fileMetadata.head.name,
-          File(),
+          File,
           fileMetadata.head.title,
           "",
           Option(fileMetadata.head.fileSize),
@@ -190,7 +190,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
           assetId,
           s"$prefix/$folderId/$assetId",
           fileMetadata.last.name,
-          File(),
+          File,
           fileMetadata.last.title,
           "",
           Option(fileMetadata.last.fileSize),
