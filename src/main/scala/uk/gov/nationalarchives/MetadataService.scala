@@ -10,6 +10,8 @@ import uk.gov.nationalarchives.MetadataService._
 import java.util.UUID
 
 class MetadataService(s3: DAS3Client[IO]) {
+  lazy private val bufferSize = 1024 * 5
+
   def parseCsvWithHeaders[T](input: Input, name: String)(implicit decoder: CsvRowDecoder[T, String]): IO[List[T]] = {
     parseCsv(input, name, decodeUsingHeaders[T]())
   }
@@ -22,7 +24,7 @@ class MetadataService(s3: DAS3Client[IO]) {
     for {
       pub <- s3.download(input.s3Bucket, s"${input.s3Prefix}$name")
       csvString <- pub
-        .toStreamBuffered[IO](1024 * 5)
+        .toStreamBuffered[IO](bufferSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(text.utf8.decode)
         .through(decoderPipe)
@@ -33,7 +35,7 @@ class MetadataService(s3: DAS3Client[IO]) {
 
   def metadataToDynamoTables(
       batchId: String,
-      departmentAndSeries: DepartmentSeries,
+      departmentAndSeries: DepartmentAndSeriesTableData,
       metadata: List[Metadata],
       bagitManifests: List[BagitManifest]
   ): IO[List[DynamoTable]] = {
@@ -45,14 +47,14 @@ class MetadataService(s3: DAS3Client[IO]) {
       departmentAndSeries.department ::
         metadata.map {
           case AssetMetadata(identifier, parentPath, title) =>
-            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", title, "Asset", "", "")
+            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", title, Asset(), "", "")
           case FileMetadata(identifier, parentPath, name, fileSize, title) =>
             DynamoTable(
               batchId,
               identifier,
               s"$pathPrefix/${parentPath.stripPrefix("/")}",
               name,
-              "File",
+              File(),
               title,
               "",
               Option(fileSize),
@@ -61,21 +63,38 @@ class MetadataService(s3: DAS3Client[IO]) {
             )
           case FolderMetadata(identifier, parentPath, name, title) =>
             val path = if (parentPath.isEmpty) pathPrefix else s"$pathPrefix/${parentPath.stripPrefix("/")}"
-            DynamoTable(batchId, identifier, path, name, "Folder", title, "")
+            DynamoTable(batchId, identifier, path, name, Folder(), title, "")
         } ++ departmentAndSeries.series.toList
 
     }
   }
 }
 object MetadataService {
-  trait Metadata
+  sealed trait Type {
+    def value: String
+  }
+  case class Folder() extends Type {
+    override def value: String = "Folder"
+  }
+  case class Asset() extends Type {
+    override def value: String = "Asset"
+  }
+  case class File() extends Type {
+    override def value: String = "File"
+  }
+
+  sealed trait Metadata {
+    def identifier: UUID
+    def parentPath: String
+    def title: String
+  }
 
   case class DynamoTable(
       batchId: String,
       id: UUID,
       parentPath: String,
       name: String,
-      `type`: String,
+      `type`: Type,
       title: String,
       description: String,
       fileSize: Option[Long] = None,
@@ -91,7 +110,7 @@ object MetadataService {
 
   case class BagitManifest(checksum: String, filePath: String)
 
-  case class DepartmentSeries(department: DynamoTable, series: Option[DynamoTable])
+  case class DepartmentAndSeriesTableData(department: DynamoTable, series: Option[DynamoTable])
 
   def apply(): MetadataService = {
     val s3 = DAS3Client[IO]()

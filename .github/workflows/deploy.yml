@@ -1,4 +1,4 @@
-name: DR2 Deploy DR2 Ingest Mapper Lambda
+name: Deploy DR2 Ingest Mapper Lambda
 on:
   workflow_dispatch:
     inputs:
@@ -23,7 +23,7 @@ jobs:
     uses: nationalarchives/dr2-github-actions/.github/workflows/lambda_deploy.yml@main
     with:
       lambda-name: ${{ github.event.inputs.environment }}-dr2-ingest-mapper
-      deployment-package: notifications_lambda.zip
+      deployment-package: dr2-ingest-mapper.jar
       environment: ${{ github.event.inputs.environment }}
       to-deploy: ${{ github.event.inputs.to-deploy }}
     secrets:

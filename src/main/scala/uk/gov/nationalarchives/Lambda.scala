@@ -5,13 +5,14 @@ import cats.effect.unsafe.implicits.global
 import com.amazonaws.services.lambda.runtime.{Context, RequestStreamHandler}
 import fs2.data.csv._
 import fs2.data.csv.generic.semiauto._
-import org.scanamo.generic.auto._
+import org.scanamo.generic.semiauto._
+import org.scanamo.{DynamoFormat, TypeCoercionError}
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
 import ujson.{Null, Value}
 import uk.gov.nationalarchives.Lambda.{Config, _}
-import uk.gov.nationalarchives.MetadataService.{AssetMetadata, BagitManifest, FileMetadata, FolderMetadata}
+import uk.gov.nationalarchives.MetadataService._
 import upickle.default
 import upickle.default._
 
@@ -39,6 +40,18 @@ class Lambda extends RequestStreamHandler {
     case None        => Null
   }
 
+  implicit val typeFormat: Typeclass[Type] = DynamoFormat.xmap[Type, String](
+    {
+      case "Folder"   => Right(Folder())
+      case "Asset"    => Right(Asset())
+      case "File"     => Right(File())
+      case typeString => Left(TypeCoercionError(new Exception(s"Type $typeString not found")))
+    },
+    typeCaseClass => typeCaseClass.value
+  )
+
+  implicit val dynamoTableFormat: Typeclass[DynamoTable] = deriveDynamoFormat[DynamoTable]
+
   override def handleRequest(inputStream: InputStream, outputStream: OutputStream, context: Context): Unit = {
     val inputString = inputStream.readAllBytes().map(_.toChar).mkString
     val input = read[Input](inputString)
@@ -53,14 +66,14 @@ class Lambda extends RequestStreamHandler {
       entries <- metadataService.metadataToDynamoTables(input.batchId, departmentAndSeries, folderMetadata ++ assetMetadata ++ fileMetadata, bagManifests)
       _ <- dynamo.writeItems(config.dynamoTableName, entries)
     } yield {
-      val folderMetadataIds: List[UUID] = folderMetadata.filter(fm => fm.title != fm.name).map(_.identifier)
-      val departmentSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
+      val folderMetadataIdsWhereTitleAndNameNotSame: List[UUID] = folderMetadata.filter(fm => fm.title != fm.name).map(_.identifier)
+      val departmentAndSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
 
       val stateData = StateData(
         input.batchId,
         input.s3Bucket,
         input.s3Prefix,
-        folderMetadataIds ++ departmentSeriesIds,
+        folderMetadataIdsWhereTitleAndNameNotSame ++ departmentAndSeriesIds,
         folderMetadata.filter(fm => fm.title == fm.name).map(_.identifier),
         assetMetadata.map(_.identifier)
       )

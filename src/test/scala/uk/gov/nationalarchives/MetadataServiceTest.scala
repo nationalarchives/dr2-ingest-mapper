@@ -12,7 +12,17 @@ import org.scalatest.matchers.should.Matchers._
 import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2, TableFor3}
 import reactor.core.publisher.Flux
 import uk.gov.nationalarchives.Lambda.Input
-import uk.gov.nationalarchives.MetadataService.{AssetMetadata, BagitManifest, DepartmentSeries, DynamoTable, FileMetadata, FolderMetadata}
+import uk.gov.nationalarchives.MetadataService.{
+  Asset,
+  AssetMetadata,
+  BagitManifest,
+  DepartmentAndSeriesTableData,
+  DynamoTable,
+  File,
+  FileMetadata,
+  Folder,
+  FolderMetadata
+}
 
 import java.nio.ByteBuffer
 import java.util.UUID
@@ -53,23 +63,38 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
     }
   }
 
+  private def checkTableRows(result: List[DynamoTable], ids: List[UUID], expectedSize: Int, expectedTable: DynamoTable) = {
+    val rows = result.filter(r => ids.contains(r.id))
+    rows.size should equal(expectedSize)
+    rows.map { row =>
+      ids.contains(row.id) should be(true)
+      row.name should equal(expectedTable.name)
+      row.title should equal(expectedTable.title)
+      row.parentPath should equal(expectedTable.parentPath)
+      row.batchId should equal(expectedTable.batchId)
+      row.description should equal(expectedTable.description)
+      row.fileSize should equal(expectedTable.fileSize)
+      row.`type` should equal(expectedTable.`type`)
+    }
+  }
+
   val testCsvTable: TableFor3[String, String, String] = Table(
-    ("id", "validCsv", "invalidCsv"),
+    ("headerStatus", "validCsv", "invalidCsv"),
     ("With", testCsvWithHeaders, invalidTestCsvWithHeaders),
     ("Without", testCsvWithoutHeaders, invalidTestCsvWithoutHeaders)
   )
 
-  forAll(testCsvTable) { (id, validCsv, invalidCsv) =>
+  forAll(testCsvTable) { (headerStatus, validCsv, invalidCsv) =>
     def parseCsv(s3: DAS3Client[IO], input: Input): List[Test] = {
       val service = new MetadataService(s3)
-      (if (id == "With") {
+      (if (headerStatus == "With") {
          service.parseCsvWithHeaders[Test](input, "name")
        } else {
          service.parseCsvWithoutHeaders[Test](input, "name")
        }).unsafeRunSync()
     }
 
-    s"parseCsv${id}Headers" should "return the correct row values" in {
+    s"parseCsv${headerStatus}Headers" should "return the correct row values" in {
       val input = Input("testBatch", "bucket", "prefix/", Option("T"), Option("T TEST"))
       val s3 = mockS3(validCsv)
       val result = parseCsv(s3, input)
@@ -81,7 +106,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       result.last.value should equal("testValue2")
     }
 
-    s"parseCsv${id}Headers" should "return an error if the csv is in an unexpected format" in {
+    s"parseCsv${headerStatus}Headers" should "return an error if the csv is in an unexpected format" in {
       val input = Input("testBatch", "bucket", "prefix/", Option("T"), Option("T TEST"))
       val s3 = mockS3(invalidCsv)
       val ex = intercept[DecoderError] {
@@ -90,7 +115,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       ex.getMessage should equal("Error decoding csv")
     }
 
-    s"parseCsv${id}Headers" should "return an error if the s3 key is not found" in {
+    s"parseCsv${headerStatus}Headers" should "return an error if the s3 key is not found" in {
       val input = Input("testBatch", "bucket", "prefix/", Option("T"), Option("T TEST"))
       val s3 = mockS3(validCsv, returnError = true)
       val ex = intercept[Exception] {
@@ -110,7 +135,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       val s3 = mockS3(testCsvWithHeaders)
 
       def table(id: UUID, tableType: String, parentPath: String) =
-        DynamoTable("batchId", id, parentPath, tableType, "Folder", s"$tableType Title", s"$tableType Description")
+        DynamoTable("batchId", id, parentPath, tableType, Folder(), s"$tableType Title", s"$tableType Description")
 
       val batchId = "batchId"
       val folderId = UUID.randomUUID()
@@ -119,7 +144,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       val fileIdTwo = UUID.randomUUID()
       val departmentTable = table(departmentId, "department", "")
       val seriesTable = seriesIdOpt.map(id => table(id, "series", departmentId.toString))
-      val departmentAndSeries = DepartmentSeries(departmentTable, seriesTable)
+      val departmentAndSeries = DepartmentAndSeriesTableData(departmentTable, seriesTable)
       val folderMetadata = List(FolderMetadata(folderId, "", "folderName", "folderTitle"))
       val assetMetadata = List(AssetMetadata(assetId, folderId.toString, "assetTitle"))
       val fileMetadata = List(
@@ -132,28 +157,15 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
 
       result.size should equal(5 + seriesIdOpt.size)
 
-      def checkTableRows(ids: List[UUID], expectedSize: Int, expectedTable: DynamoTable) = {
-        val rows = result.filter(r => ids.contains(r.id))
-        rows.size should equal(expectedSize)
-        rows.map { row =>
-          ids.contains(row.id) should be(true)
-          row.name should equal(expectedTable.name)
-          row.title should equal(expectedTable.title)
-          row.parentPath should equal(expectedTable.parentPath)
-          row.batchId should equal(expectedTable.batchId)
-          row.description should equal(expectedTable.description)
-          row.fileSize should equal(expectedTable.fileSize)
-          row.`type` should equal(expectedTable.`type`)
-        }
-      }
       val prefix = s"$departmentId${seriesIdOpt.map(id => s"/$id").getOrElse("")}"
-      checkTableRows(List(departmentId), 1, DynamoTable(batchId, departmentId, "", "department", "Folder", "department Title", "department Description"))
+      checkTableRows(result, List(departmentId), 1, DynamoTable(batchId, departmentId, "", "department", Folder(), "department Title", "department Description"))
       seriesIdOpt.map(seriesId =>
-        checkTableRows(List(seriesId), 1, DynamoTable(batchId, seriesId, departmentId.toString, "series", "Folder", "series Title", "series Description"))
+        checkTableRows(result, List(seriesId), 1, DynamoTable(batchId, seriesId, departmentId.toString, "series", Folder(), "series Title", "series Description"))
       )
-      checkTableRows(List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix", folderMetadata.head.name, "Folder", folderMetadata.head.title, ""))
-      checkTableRows(List(assetId), 1, DynamoTable(batchId, assetId, s"$prefix/$folderId", assetMetadata.head.title, "Asset", "", ""))
+      checkTableRows(result, List(folderId), 1, DynamoTable(batchId, folderId, s"$prefix", folderMetadata.head.name, Folder(), folderMetadata.head.title, ""))
+      checkTableRows(result, List(assetId), 1, DynamoTable(batchId, assetId, s"$prefix/$folderId", assetMetadata.head.title, Asset(), "", ""))
       checkTableRows(
+        result,
         List(fileIdOne),
         1,
         DynamoTable(
@@ -161,7 +173,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
           assetId,
           s"$prefix/$folderId/$assetId",
           fileMetadata.head.name,
-          "File",
+          File(),
           fileMetadata.head.title,
           "",
           Option(fileMetadata.head.fileSize),
@@ -170,6 +182,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
         )
       )
       checkTableRows(
+        result,
         List(fileIdTwo),
         1,
         DynamoTable(
@@ -177,7 +190,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
           assetId,
           s"$prefix/$folderId/$assetId",
           fileMetadata.last.name,
-          "File",
+          File(),
           fileMetadata.last.title,
           "",
           Option(fileMetadata.last.fileSize),
