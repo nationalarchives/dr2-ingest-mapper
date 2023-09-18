@@ -7,7 +7,6 @@ import fs2.data.csv._
 import fs2.data.csv.generic.semiauto._
 import org.scanamo.{DynamoFormat, TypeCoercionError}
 import org.scanamo.generic.semiauto._
-//import org.scanamo.{DynamoFormat, TypeCoercionError}
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
@@ -67,7 +66,6 @@ class Lambda extends RequestStreamHandler {
       entries <- metadataService.metadataToDynamoTables(input.batchId, departmentAndSeries, folderMetadata ++ assetMetadata ++ fileMetadata, bagManifests)
       _ <- dynamo.writeItems(config.dynamoTableName, entries)
     } yield {
-      folderMetadata.collect { case fm if fm.title != fm.name => fm.identifier }
       val folderMetadataIdsWhereTitleAndNameNotSame: List[UUID] = folderMetadata.collect { case fm if fm.title != fm.name => fm.identifier }
       val departmentAndSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
 
