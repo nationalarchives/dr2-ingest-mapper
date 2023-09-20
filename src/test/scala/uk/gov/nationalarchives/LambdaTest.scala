@@ -170,7 +170,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
            |    {
            |      "citableReference": "$col",
            |      "scopeContent": {
-           |        "description": "<scopecontent><head>Head</head><p>TestDescription$col</p></scopecontent>"
+           |        "description": "<scopecontent><head>Head</head><p>TestDescription$col with &#48</p></scopecontent>"
            |      },
            |      "title": "<unittitle>Test Title $col</unittitle>"
            |    }
@@ -244,8 +244,8 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     val tableRequestItems = dynamoRequestBodies.head.RequestItems.test
 
     tableRequestItems.length should equal(6)
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", Folder, "Test Title A", "TestDescriptionA"))
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", Folder, "Test Title A 1", "TestDescriptionA 1"))
+    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", Folder, "Test Title A", "TestDescriptionA with 0"))
+    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", Folder, "Test Title A 1", "TestDescriptionA 1 with 0"))
     checkDynamoItems(tableRequestItems, DynamoTable("TEST", folderIdentifier, s"${uuids.head}/${uuids.tail.head}", "TestName", Folder, "TestTitle", ""))
     checkDynamoItems(tableRequestItems, DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetTitle", Asset, "", ""))
     checkDynamoItems(
