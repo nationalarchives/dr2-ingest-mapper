@@ -22,6 +22,7 @@ import java.io.ByteArrayInputStream
 import java.net.URI
 import java.util.UUID
 import scala.jdk.CollectionConverters.ListHasAsScala
+import scala.util.Try
 
 class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
@@ -62,7 +63,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
       read[DynamoSRequestField](json("batchId")),
       read[DynamoSRequestField](json("id")),
       json.obj.get("parentPath").map(pp => read[DynamoSRequestField](pp)).getOrElse(DynamoSRequestField("")),
-      read[DynamoSRequestField](json("name")),
+      Try(read[DynamoSRequestField](json("name"))).getOrElse(DynamoSRequestField("")),
       read[DynamoSRequestField](json("type")),
       if (json.obj.contains("fileSize")) Option(read[DynamoNRequestField](json("fileSize"))) else None,
       json.obj.get("title").map(pp => read[DynamoSRequestField](pp)).getOrElse(DynamoSRequestField("")),
@@ -247,7 +248,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", Folder, "Test Title A", "TestDescriptionA"))
     checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", Folder, "Test Title A 1", "TestDescriptionA 1"))
     checkDynamoItems(tableRequestItems, DynamoTable("TEST", folderIdentifier, s"${uuids.head}/${uuids.tail.head}", "TestName", Folder, "TestTitle", ""))
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetTitle", Asset, "", ""))
+    checkDynamoItems(tableRequestItems, DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "", Asset, "TestAssetTitle", ""))
     checkDynamoItems(
       tableRequestItems,
       DynamoTable("TEST", docxIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier/$assetIdentifier", "Test.docx", File, "TestTitle", "", Option(1))
@@ -260,7 +261,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         s"${uuids.head}/${uuids.tail.head}/$folderIdentifier/$assetIdentifier",
         "TEST-metadata.json",
         File,
-        "",
+        "TEST-metadata.json",
         "",
         Option(2),
         Option("checksum"),

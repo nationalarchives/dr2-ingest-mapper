@@ -64,7 +64,7 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
     } yield {
       val departmentTableEntry = departmentDiscoveryAsset
         .map(tableEntry)
-        .getOrElse(DynamoTable(input.batchId, randomUuidGenerator(), "", "Unknown", folder, "", ""))
+        .getOrElse(DynamoTable(input.batchId, randomUuidGenerator(), "", "Unknown", folder, "Unknown", ""))
       val seriesTableEntryOpt = seriesDiscoveryAsset
         .map(tableEntry)
         .map(_.copy(parentPath = departmentTableEntry.id.toString))

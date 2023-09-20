@@ -137,7 +137,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     result.series.isDefined should equal(true)
     val department = result.department
     department.name should equal("Unknown")
-    department.title should equal("")
+    department.title should equal("Unknown")
     department.description should equal("")
   }
 
@@ -165,7 +165,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     result.series.isDefined should equal(false)
     val department = result.department
     department.name should equal("Unknown")
-    department.title should equal("")
+    department.title should equal("Unknown")
     department.description should equal("")
   }
 }

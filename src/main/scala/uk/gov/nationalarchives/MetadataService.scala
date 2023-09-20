@@ -33,6 +33,9 @@ class MetadataService(s3: DAS3Client[IO]) {
     } yield csvString
   }
 
+  private def ifEmptyOtherwise(str: String, otherwise: String): String =
+    if (str.isEmpty || Option(str).isEmpty) otherwise else str
+
   def metadataToDynamoTables(
       batchId: String,
       departmentAndSeries: DepartmentAndSeriesTableData,
@@ -47,7 +50,7 @@ class MetadataService(s3: DAS3Client[IO]) {
       departmentAndSeries.department ::
         metadata.map {
           case AssetMetadata(identifier, parentPath, title) =>
-            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", title, Asset, "", "")
+            DynamoTable(batchId, identifier, s"$pathPrefix/${parentPath.stripPrefix("/")}", "", Asset, title, "")
           case FileMetadata(identifier, parentPath, name, fileSize, title) =>
             DynamoTable(
               batchId,
@@ -55,7 +58,7 @@ class MetadataService(s3: DAS3Client[IO]) {
               s"$pathPrefix/${parentPath.stripPrefix("/")}",
               name,
               File,
-              title,
+              ifEmptyOtherwise(title, name),
               "",
               Option(fileSize),
               fileIdToChecksum.get(identifier),
@@ -63,7 +66,7 @@ class MetadataService(s3: DAS3Client[IO]) {
             )
           case FolderMetadata(identifier, parentPath, name, title) =>
             val path = if (parentPath.isEmpty) pathPrefix else s"$pathPrefix/${parentPath.stripPrefix("/")}"
-            DynamoTable(batchId, identifier, path, name, Folder, title, "")
+            DynamoTable(batchId, identifier, path, name, Folder, ifEmptyOtherwise(title, name), "")
         } ++ departmentAndSeries.series.toList
 
     }
