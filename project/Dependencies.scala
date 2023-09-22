@@ -16,7 +16,7 @@ object Dependencies {
   lazy val scalaXml = "org.scala-lang.modules" %% "scala-xml" % "2.2.0"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.12"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "2.27.2"
-  lazy val sttp = "com.softwaremill.sttp.client3" %% "fs2" % "3.8.16"
-  lazy val sttpUpickle = "com.softwaremill.sttp.client3" %% "upickle" % "3.8.16"
+  lazy val sttp = "com.softwaremill.sttp.client3" %% "fs2" % "3.9.0"
+  lazy val sttpUpickle = "com.softwaremill.sttp.client3" %% "upickle" % "3.9.0"
   lazy val scalaTest = "org.scalatest" %% "scalatest" % "3.2.15"
 }
