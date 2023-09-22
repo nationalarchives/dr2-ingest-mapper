@@ -2,7 +2,7 @@ import sbt._
 object Dependencies {
   lazy val logbackVersion = "2.20.0"
   lazy val awsClientVersion = "0.1.16"
-  lazy val fs2Reactive = "co.fs2" %% "fs2-reactive-streams" % "3.7.0"
+  lazy val fs2Reactive = "co.fs2" %% "fs2-reactive-streams" % "3.9.2"
   lazy val fs2Csv = "org.gnieh" %% "fs2-data-csv" % "1.8.1"
   lazy val fs2CsvGeneric = "org.gnieh" %% "fs2-data-csv-generic" % "1.8.1"
   lazy val log4jSlf4j = "org.apache.logging.log4j" % "log4j-slf4j-impl" % logbackVersion
