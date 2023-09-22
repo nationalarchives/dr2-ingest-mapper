@@ -20,15 +20,15 @@ import scala.xml.XML
 class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Streams[IO]], randomUuidGenerator: () => UUID) {
   private val folder = Folder
 
-  private def replaceUnicodeDecimals(input: String) =
+  private def replaceHtmlCodesWithUnicodeChars(input: String) =
     "&#[0-9]+".r.replaceAllIn(input, _.matched.drop(2).toInt.toChar.toString)
 
   private def stripHtmlFromDiscoveryResponse(discoveryAsset: DiscoveryCollectionAsset) = {
     val resources = for {
       xsltStream <- Resource.make(IO(getClass.getResourceAsStream("/transform.xsl")))(is => IO(is.close()))
       inputStream <- Resource.make {
-        val description = replaceUnicodeDecimals(discoveryAsset.scopeContent.description)
-        IO(new ByteArrayInputStream(description.getBytes()))
+        val descriptionWithHtmlCodesReplaced = replaceHtmlCodesWithUnicodeChars(discoveryAsset.scopeContent.description)
+        IO(new ByteArrayInputStream(descriptionWithHtmlCodesReplaced.getBytes()))
       }(is => IO(is.close()))
       outputStream <- Resource.make(IO(new ByteArrayOutputStream()))(bos => IO(bos.close()))
     } yield (xsltStream, inputStream, outputStream)
