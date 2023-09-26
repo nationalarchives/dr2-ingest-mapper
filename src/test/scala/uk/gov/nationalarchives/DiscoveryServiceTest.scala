@@ -10,9 +10,8 @@ import sttp.capabilities.fs2.Fs2Streams
 import sttp.client3.UriContext
 import sttp.client3.impl.cats.CatsMonadError
 import sttp.client3.testing.SttpBackendStub
+import ujson.Obj
 import uk.gov.nationalarchives.Lambda.Input
-import uk.gov.nationalarchives.MetadataService.DynamoTable
-
 import java.util.UUID
 
 class DiscoveryServiceTest extends AnyFlatSpec {
@@ -55,15 +54,15 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     col -> body
   }.toMap
 
-  private def checkDynamoTable(table: DynamoTable, collection: String, expectedId: String, parentPath: String): Assertion = {
-    table.id.toString should equal(expectedId)
-    table.name should equal(collection)
-    table.title should equal(s"Test Title $collection")
-    table.batchId should equal("testBatch")
-    table.`type`.toString should equal("Folder")
-    table.fileSize.isEmpty should be(true)
-    table.parentPath should equal(parentPath)
-    table.description should equal(s"TestDescription $collection 1          \nTestDescription $collection 2")
+  private def checkDynamoTable(table: Obj, collection: String, expectedId: String, parentPath: Option[String]): Assertion = {
+    table("id").str should equal(expectedId)
+    table("name").str should equal(collection)
+    table("title").str should equal(s"Test Title $collection")
+    table("batchId").str should equal("testBatch")
+    table("type").str should equal("ArchiveFolder")
+    !table.value.contains("fileSize") should be(true)
+    table.value.get("parentPath").map(_.str) should equal(parentPath)
+    table("description").str should equal(s"TestDescription $collection 1          \nTestDescription $collection 2")
   }
 
   "getDepartmentAndSeriesRows" should "return the correct values for series and department" in {
@@ -80,8 +79,8 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val department = result.department
     val series = result.series.head
 
-    checkDynamoTable(department, "T", uuids.head, "")
-    checkDynamoTable(series, "T TEST", uuids.tail.head, uuids.head)
+    checkDynamoTable(department, "T", uuids.head, None)
+    checkDynamoTable(series, "T TEST", uuids.tail.head, Option(uuids.head))
   }
 
   "getDepartmentAndSeriesRows" should "return an error if the department reference doesn't match the input" in {
@@ -136,9 +135,9 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(true)
     val department = result.department
-    department.name should equal("Unknown")
-    department.title should equal("")
-    department.description should equal("")
+    department("name").str should equal("Unknown")
+    !department.value.contains("title") should equal(true)
+    !department.value.contains("description") should equal(true)
   }
 
   "getDepartmentAndSeriesRows" should "return a department and an empty series if the series is missing" in {
@@ -151,9 +150,9 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department.name should equal("T")
-    department.title should equal("Test Title T")
-    department.description should equal("TestDescription T 1          \nTestDescription T 2")
+    department("name").str should equal("T")
+    department("title").str should equal("Test Title T")
+    department("description").str should equal("TestDescription T 1          \nTestDescription T 2")
   }
 
   "getDepartmentAndSeriesRows" should "return an unknown department if the series and department are missing" in {
@@ -164,8 +163,8 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department.name should equal("Unknown")
-    department.title should equal("")
-    department.description should equal("")
+    department("name").str should equal("Unknown")
+    !department.value.contains("title") should equal(true)
+    !department.value.contains("description") should equal(true)
   }
 }

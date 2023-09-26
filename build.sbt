@@ -8,8 +8,6 @@ lazy val root = (project in file(".")).
   settings(
     name := "dr2-ingest-mapper",
     libraryDependencies ++= Seq(
-      fs2Csv,
-      fs2CsvGeneric,
       fs2Reactive,
       log4jSlf4j,
       log4jCore,
