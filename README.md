@@ -14,25 +14,9 @@ The lambda:
 }
 ```
 * Gets the title and description for department and series from discovery. This is run through the XSLT in `src/main/resources/transform.xsl` to replace the EAD tags with newlines.
-* Parses the folder metadata csv
-* Parses the asset metadata csv
-* Parses the file metadata csv
+* Parses the metadata json file
 * Parses the manifest file
-* Converts these into Dynamo case classes
-```scala
-  case class DynamoTable(
-      batchId: String,
-      id: UUID,
-      parentPath: String,
-      name: String,
-      `type`: String,
-      title: String,
-      description: String,
-      fileSize: Option[Long] = None,
-      checksumSha256: Option[String] = None,
-      fileExtension: Option[String] = None
-  )
-```
+* Converts these into ujson Obj classes. This is because we will eventually have to handle fields we don't know about in advance.
 * Updates dynamo with the values
 * Writes the state data for the next step function step with this format:
 ```json
