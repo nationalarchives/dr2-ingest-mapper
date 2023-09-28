@@ -33,8 +33,8 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val description = <scopecontent>
         <head>Head</head>
         <p><list>
-          <item>TestDescription {col} 1</item>
-          <item>TestDescription {col} 2</item></list>
+          <item>TestDescription {col} &#49;</item>
+          <item>TestDescription {col} &#50;</item></list>
         </p>
       </scopecontent>.toString().replaceAll("\n", "")
 
@@ -46,7 +46,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
          |      "scopeContent": {
          |        "description": "$description"
          |      },
-         |      "title": "<unittitle>Test Title $col</unittitle>"
+         |      "title": "<unittitle>Test \\\\Title $col</unittitle>"
          |    }
          |  ]
          |}

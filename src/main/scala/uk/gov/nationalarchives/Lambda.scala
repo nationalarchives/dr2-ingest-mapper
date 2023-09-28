@@ -9,7 +9,7 @@ import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
 import ujson.{Null, Value, Obj, Str, Num}
-import uk.gov.nationalarchives.Lambda.{Config, Input, StateData}
+import uk.gov.nationalarchives.Lambda.{Config, Input, StateOutput}
 import uk.gov.nationalarchives.MetadataService._
 import upickle.default
 import upickle.default._
@@ -36,8 +36,8 @@ class Lambda extends RequestStreamHandler {
   }
 
   implicit val dynamoTableFormat: Typeclass[Obj] = new Typeclass[Obj] {
-    override def read(av: DynamoValue): Either[DynamoReadError, Obj] = {
-      av.asObject
+    override def read(dynamoValue: DynamoValue): Either[DynamoReadError, Obj] = {
+      dynamoValue.asObject
         .map(_.toMap[String].map { valuesMap =>
           val jsonValuesMap = valuesMap.view.mapValues(Str)
           Obj(mutable.LinkedHashMap.newBuilder[String, Value].addAll(jsonValuesMap).result())
@@ -45,9 +45,9 @@ class Lambda extends RequestStreamHandler {
         .getOrElse(Left(TypeCoercionError(new Exception("Dynamo object not found"))))
     }
 
-    override def write(t: Obj): DynamoValue = {
-      val dynamoValuesMap: Map[String, DynamoValue] = t.value.toMap.view
-        .filterNot(_._2.isNull)
+    override def write(jsonObject: Obj): DynamoValue = {
+      val dynamoValuesMap: Map[String, DynamoValue] = jsonObject.value.toMap.view
+        .filterNot { case (_, value) => value.isNull }
         .mapValues {
           case Num(value) => DynamoValue.fromNumber[Long](value.toLong)
           case s          => DynamoValue.fromString(s.str)
@@ -75,7 +75,7 @@ class Lambda extends RequestStreamHandler {
         .mapValues(_.map(jsonObj => UUID.fromString(jsonObj("id").str)))
         .toMap
 
-      val stateData = StateData(
+      val stateData = StateOutput(
         input.batchId,
         input.s3Bucket,
         input.s3Prefix,
@@ -89,8 +89,8 @@ class Lambda extends RequestStreamHandler {
 
 }
 object Lambda {
-  implicit val stateDataWriter: default.Writer[StateData] = macroW[StateData]
-  case class StateData(batchId: String, s3Bucket: String, s3Prefix: String, archiveHierarchyFolders: List[UUID], contentFolders: List[UUID], contentAssets: List[UUID])
+  implicit val stateDataWriter: default.Writer[StateOutput] = macroW[StateOutput]
+  case class StateOutput(batchId: String, s3Bucket: String, s3Prefix: String, archiveHierarchyFolders: List[UUID], contentFolders: List[UUID], contentAssets: List[UUID])
   case class Input(batchId: String, s3Bucket: String, s3Prefix: String, department: Option[String], series: Option[String])
   case class Config(dynamoTableName: String, discoveryApiUrl: String)
 }

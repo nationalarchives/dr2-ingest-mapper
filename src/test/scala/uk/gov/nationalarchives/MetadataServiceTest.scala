@@ -57,25 +57,25 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
   s"parseBagManifest" should "return the correct row values" in {
     val input = Input("testBatch", "bucket", "prefix/", Option("T"), Option("T TEST"))
     val id = UUID.randomUUID()
-    val validCsv = s"checksum $id"
-    val s3 = mockS3(validCsv, "manifest-sha256.txt")
-    val result: List[BagitManifest] = new MetadataService(s3).parseBagManifest(input).unsafeRunSync()
+    val validBagitManifestRow = s"checksum $id"
+    val s3 = mockS3(validBagitManifestRow, "manifest-sha256.txt")
+    val result: List[BagitManifestRow] = new MetadataService(s3).parseBagManifest(input).unsafeRunSync()
 
     result.size should equal(1)
     result.head.checksum should equal("checksum")
     result.head.filePath should equal(id.toString)
   }
 
-  s"parseBagManifest" should "return the same response for both fields if there is only one column" in {
+  s"parseBagManifest" should "return an error if there is only one column" in {
     val input = Input("testBatch", "bucket", "prefix/", Option("T"), Option("T TEST"))
-    val id = UUID.randomUUID()
-    val invalidCsv = s"invalid"
-    val s3 = mockS3(invalidCsv, "manifest-sha256.txt")
-    val result: List[BagitManifest] = new MetadataService(s3).parseBagManifest(input).unsafeRunSync()
+    val invalidBagitManifestRow = "onlyOneColumn"
+    val s3 = mockS3(invalidBagitManifestRow, "manifest-sha256.txt")
 
-    result.size should equal(1)
-    result.head.checksum should equal("invalid")
-    result.head.filePath should equal("invalid")
+    val ex = intercept[Exception] {
+      new MetadataService(s3).parseBagManifest(input).unsafeRunSync()
+    }
+
+    ex.getMessage should equal("Expecting 2 columns in manifest-sha256.txt, found 1")
   }
 
   val departmentSeriesTable: TableFor2[UUID, Option[UUID]] = Table(
@@ -84,7 +84,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
     (UUID.randomUUID(), None)
   )
   forAll(departmentSeriesTable) { (departmentId, seriesIdOpt) =>
-    "metadataToDynamoTables" should s"return a list of tables with the correct prefix for department $departmentId and series ${seriesIdOpt.getOrElse("None")}" in {
+    "parseMetadataJson" should s"return a list of tables with the correct prefix for department $departmentId and series ${seriesIdOpt.getOrElse("None")}" in {
       def table(id: UUID, tableType: String, parentPath: String) = {
         Obj.from {
           Map(
@@ -113,7 +113,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
            |{"id":"$fileIdOne","parentId":"$assetId","title":"Test","type":"File","name":"name.txt","fileSize":1, "checksumSha256": "name-checksum"},
            |{"id":"$fileIdTwo","parentId":"$assetId","title":"","type":"File","name":"TEST-metadata.json","fileSize":2, "checksumSha256": "metadata-checksum"}]
            |""".stripMargin.replaceAll("\n", "")
-      val bagitManifests: List[BagitManifest] = List(BagitManifest("checksum-docx", fileIdOne.toString), BagitManifest("checksum-metadata", fileIdTwo.toString))
+      val bagitManifests: List[BagitManifestRow] = List(BagitManifestRow("checksum-docx", fileIdOne.toString), BagitManifestRow("checksum-metadata", fileIdTwo.toString))
       val s3 = mockS3(metadata, "metadata.json")
       val input = Input(batchId, "bucket", "prefix/", Option("department"), Option("series"))
       val result =
@@ -126,7 +126,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       seriesIdOpt.map(seriesId =>
         checkTableRows(result, List(seriesId), DynamoTable(batchId, seriesId, departmentId.toString, "series", ArchiveFolder, "series Title", "series Description"))
       )
-      checkTableRows(result, List(folderId), DynamoTable(batchId, folderId, s"$prefix", "TestName", ArchiveFolder, "TestTitle", ""))
+      checkTableRows(result, List(folderId), DynamoTable(batchId, folderId, prefix, "TestName", ArchiveFolder, "TestTitle", ""))
       checkTableRows(result, List(assetId), DynamoTable(batchId, assetId, s"$prefix/$folderId", "TestAssetName", Asset, "TestAssetTitle", ""))
       checkTableRows(
         result,

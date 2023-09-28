@@ -13,7 +13,7 @@ The lambda:
   "series": "series"
 }
 ```
-* Gets the title and description for department and series from discovery. This is run through the XSLT in `src/main/resources/transform.xsl` to replace the EAD tags with newlines.
+* Gets the title and description for department and series from Discovery. This is run through the XSLT in `src/main/resources/transform.xsl` to replace the EAD tags with newlines.
 * Parses the metadata json file
 * Parses the manifest file
 * Converts these into ujson Obj classes. This is because we will eventually have to handle fields we don't know about in advance.

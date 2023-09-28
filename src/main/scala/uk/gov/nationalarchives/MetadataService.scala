@@ -1,6 +1,7 @@
 package uk.gov.nationalarchives
 
 import cats.effect.IO
+import cats.implicits._
 import fs2.interop.reactivestreams._
 import fs2.{Chunk, Pipe, Stream, text}
 import uk.gov.nationalarchives.Lambda.Input
@@ -18,71 +19,70 @@ class MetadataService(s3: DAS3Client[IO]) {
     }.toMap
 
     def searchParentIds(parentIdOpt: Option[UUID]): String = {
-      val nextParent = parentIdOpt.flatMap(idToParentId.get).flatten
-      val thisParent = parentIdOpt.map(_.toString).getOrElse("")
-      if (nextParent.isEmpty) {
-        thisParent
-      } else {
-        searchParentIds(nextParent) + s"/$thisParent"
-      }
+      val parentId = parentIdOpt.map(_.toString).getOrElse("")
+      val parentIdOfParent = parentIdOpt.flatMap(idToParentId.get).flatten
+      if (parentIdOfParent.isEmpty) parentId else s"${searchParentIds(parentIdOfParent)}/$parentId"
     }
     idToParentId.map { case (id, parentIdOpt) =>
       id -> searchParentIds(parentIdOpt)
     }
   }
 
-  def parseMetadataJson(input: Input, departmentAndSeries: DepartmentAndSeriesTableData, bagitManifests: List[BagitManifest]): IO[List[Obj]] = {
+  def parseMetadataJson(input: Input, departmentAndSeries: DepartmentAndSeriesTableData, bagitManifests: List[BagitManifestRow]): IO[List[Obj]] = {
     parseFileFromS3(
       input,
       "metadata.json",
       s =>
-        s.flatMap { jsonString =>
+        s.flatMap { metadataJson =>
           val fileIdToChecksum: Map[UUID, String] = bagitManifests.map(bm => UUID.fromString(bm.filePath.stripPrefix("data/")) -> bm.checksum).toMap
-          val json = read(jsonString)
+          val json = read(metadataJson)
           val pathPrefix = departmentAndSeries.series
             .map(series => s"${departmentAndSeries.department("id").str}/${series("id").str}")
             .getOrElse(s"${departmentAndSeries.department("id").str}")
           val parentPaths = getParentPaths(json)
           Stream.emits {
-            json.arr.toList.map { eachEntry =>
-              val id = UUID.fromString(eachEntry("id").str)
-              val name = eachEntry("name").strOpt
+            json.arr.toList.map { metadataEntry =>
+              val id = UUID.fromString(metadataEntry("id").str)
+              val name = metadataEntry("name").strOpt
               val parentPath = parentPaths(id)
               val path = if (parentPath.isEmpty) pathPrefix else s"$pathPrefix/${parentPath.stripPrefix("/")}"
               val checksum = fileIdToChecksum.get(id).map(Str).getOrElse(Null)
               val fileExtension =
-                if (eachEntry("type").str == "File")
+                if (metadataEntry("type").str == "File")
                   name
                     .flatMap(n => n.split("\\.").lastOption)
                     .map(Str)
                     .getOrElse(Null)
                 else Null
-              val objectMap =
-                Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum" -> checksum, "fileExtension" -> fileExtension) ++ eachEntry.obj.view
+              val metadataMap =
+                Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum" -> checksum, "fileExtension" -> fileExtension) ++ metadataEntry.obj.view
                   .filterKeys(_ != "parentId")
                   .toMap
-              Obj.from(objectMap)
+              Obj.from(metadataMap)
             } ++ departmentAndSeries.series.toList ++ List(departmentAndSeries.department)
           }
         }
     )
   }
 
-  def parseBagManifest(input: Input): IO[List[BagitManifest]] = {
+  def parseBagManifest(input: Input): IO[List[BagitManifestRow]] = {
     parseFileFromS3(
       input,
       "manifest-sha256.txt",
-      file => {
-        file.flatMap { bagitManifestString =>
-          Stream.emits {
-            bagitManifestString
-              .split("\n")
-              .map { row =>
-                val eachColumn = row.split(" ")
-                BagitManifest(eachColumn.head, eachColumn.last)
+      _.flatMap { bagitManifestString =>
+        Stream.evalSeq {
+          bagitManifestString
+            .split("\n")
+            .map { rowAsString =>
+              val rowAsArray = rowAsString.split(" ")
+              if (rowAsArray.size != 2) {
+                IO.raiseError(new Exception(s"Expecting 2 columns in manifest-sha256.txt, found ${rowAsArray.size}"))
+              } else {
+                IO(BagitManifestRow(rowAsArray.head, rowAsArray.last))
               }
-              .toList
-          }
+            }
+            .toList
+            .sequence
         }
       }
     )
@@ -91,14 +91,14 @@ class MetadataService(s3: DAS3Client[IO]) {
   private def parseFileFromS3[T](input: Input, name: String, decoderPipe: Pipe[IO, String, T]): IO[List[T]] = {
     for {
       pub <- s3.download(input.s3Bucket, s"${input.s3Prefix}$name")
-      csvString <- pub
+      s3FileString <- pub
         .toStreamBuffered[IO](bufferSize)
         .flatMap(bf => Stream.chunk(Chunk.byteBuffer(bf)))
         .through(text.utf8.decode)
         .through(decoderPipe)
         .compile
         .toList
-    } yield csvString
+    } yield s3FileString
   }
 }
 object MetadataService {
@@ -128,7 +128,7 @@ object MetadataService {
     def title: String
   }
 
-  case class BagitManifest(checksum: String, filePath: String)
+  case class BagitManifestRow(checksum: String, filePath: String)
 
   case class DepartmentAndSeriesTableData(department: Obj, series: Option[Obj])
 

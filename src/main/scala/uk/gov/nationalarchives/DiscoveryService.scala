@@ -62,7 +62,7 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
   }
 
   def getDepartmentAndSeriesRows(input: Input): IO[DepartmentAndSeriesTableData] = {
-    def tableEntry(asset: DiscoveryCollectionAsset): Map[String, Value] =
+    def generateTableEntry(asset: DiscoveryCollectionAsset): Map[String, Value] =
       Map(
         "batchId" -> Str(input.batchId),
         "id" -> Str(randomUuidGenerator().toString),
@@ -73,19 +73,19 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
       )
 
     for {
-      departmentDiscoveryAsset <- input.department.map(getAssetFromDiscoveryApi).sequence
-      seriesDiscoveryAsset <- input.series.map(getAssetFromDiscoveryApi).sequence
+      potentialDepartmentDiscoveryAsset <- input.department.map(getAssetFromDiscoveryApi).sequence
+      potentialSeriesDiscoveryAsset <- input.series.map(getAssetFromDiscoveryApi).sequence
     } yield {
-      val departmentTableEntry = departmentDiscoveryAsset
-        .map(tableEntry)
+      val departmentTableEntryMap = potentialDepartmentDiscoveryAsset
+        .map(generateTableEntry)
         .getOrElse(Map("batchId" -> Str(input.batchId), "id" -> Str(randomUuidGenerator().toString), "name" -> Str("Unknown"), "type" -> Str(ArchiveFolder.toString)))
 
-      val seriesTableEntryOpt = seriesDiscoveryAsset
-        .map(tableEntry)
-        .map(jsonMap => jsonMap ++ Map("parentPath" -> departmentTableEntry("id")))
+      val seriesTableEntryOpt = potentialSeriesDiscoveryAsset
+        .map(generateTableEntry)
+        .map(jsonMap => jsonMap ++ Map("parentPath" -> departmentTableEntryMap("id")))
         .map(Obj.from)
 
-      DepartmentAndSeriesTableData(Obj.from(departmentTableEntry), seriesTableEntryOpt)
+      DepartmentAndSeriesTableData(Obj.from(departmentTableEntryMap), seriesTableEntryOpt)
     }
   }
 }

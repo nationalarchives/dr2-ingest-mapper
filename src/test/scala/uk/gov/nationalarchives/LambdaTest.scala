@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 
 class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
-  implicit val stateDataReader: default.Reader[StateData] = macroR[StateData]
+  implicit val stateDataReader: default.Reader[StateOutput] = macroR[StateOutput]
 
   override def beforeEach(): Unit = {
     dynamoServer.resetAll()
@@ -176,7 +176,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
     val os = new ByteArrayOutputStream()
     IngestMapperTest().handleRequest(defaultInputStream, os, null)
-    val stateData = read[StateData](os.toByteArray.map(_.toChar).mkString)
+    val stateData = read[StateOutput](os.toByteArray.map(_.toChar).mkString)
     val archiveFolders = stateData.archiveHierarchyFolders
     archiveFolders.size should be(3)
     archiveFolders.contains(folderIdentifier) should be(true)
