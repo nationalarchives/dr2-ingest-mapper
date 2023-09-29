@@ -12,9 +12,9 @@ import software.amazon.awssdk.auth.credentials.{AwsBasicCredentials, StaticCrede
 import software.amazon.awssdk.regions.Region
 import software.amazon.awssdk.services.dynamodb.DynamoDbAsyncClient
 import software.amazon.awssdk.services.s3.S3AsyncClient
-import ujson.Obj
 import uk.gov.nationalarchives.Lambda._
-import uk.gov.nationalarchives.MetadataService.{Asset, DynamoTable, File, Folder}
+import uk.gov.nationalarchives.TestUtils._
+import uk.gov.nationalarchives.MetadataService._
 import upickle.default
 import upickle.default._
 
@@ -25,7 +25,7 @@ import scala.jdk.CollectionConverters.ListHasAsScala
 
 class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
-  implicit val stateDataReader: default.Reader[StateData] = macroR[StateData]
+  implicit val stateDataReader: default.Reader[StateOutput] = macroR[StateOutput]
 
   override def beforeEach(): Unit = {
     dynamoServer.resetAll()
@@ -55,88 +55,37 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
          |}""".stripMargin
     new ByteArrayInputStream(inJson.getBytes())
   }
-  implicit val sRequestFieldReader: Reader[DynamoSRequestField] = macroR[DynamoSRequestField]
-  implicit val nRequestFieldReader: Reader[DynamoNRequestField] = macroR[DynamoNRequestField]
-  implicit val itemReader: Reader[DynamoItem] = reader[Obj].map[DynamoItem] { json =>
-    DynamoItem(
-      read[DynamoSRequestField](json("batchId")),
-      read[DynamoSRequestField](json("id")),
-      json.obj.get("parentPath").map(pp => read[DynamoSRequestField](pp)).getOrElse(DynamoSRequestField("")),
-      read[DynamoSRequestField](json("name")),
-      read[DynamoSRequestField](json("type")),
-      if (json.obj.contains("fileSize")) Option(read[DynamoNRequestField](json("fileSize"))) else None,
-      json.obj.get("title").map(pp => read[DynamoSRequestField](pp)).getOrElse(DynamoSRequestField("")),
-      json.obj.get("description").map(pp => read[DynamoSRequestField](pp)).getOrElse(DynamoSRequestField(""))
-    )
-  }
-  implicit val tableItemReader: Reader[DynamoTableItem] = macroR[DynamoTableItem]
-  implicit val putRequestReader: Reader[DynamoPutRequest] = macroR[DynamoPutRequest]
-  implicit val requestItemReader: Reader[DynamoRequestItem] = macroR[DynamoRequestItem]
-  implicit val requestBodyReader: Reader[DynamoRequestBody] = macroR[DynamoRequestBody]
-  case class DynamoSRequestField(S: String)
-  case class DynamoNRequestField(N: Long)
-  case class DynamoItem(
-      batchId: DynamoSRequestField,
-      id: DynamoSRequestField,
-      parentPath: DynamoSRequestField,
-      name: DynamoSRequestField,
-      `type`: DynamoSRequestField,
-      fileSize: Option[DynamoNRequestField],
-      title: DynamoSRequestField,
-      description: DynamoSRequestField
-  )
-  case class DynamoTableItem(PutRequest: DynamoPutRequest)
-  case class DynamoPutRequest(Item: DynamoItem)
-  case class DynamoRequestItem(test: List[DynamoTableItem])
-  case class DynamoRequestBody(RequestItems: DynamoRequestItem)
 
   private def stubValidNetworkRequests(dynamoTable: String = "test") = {
     val folderIdentifier = UUID.randomUUID()
     val assetIdentifier = UUID.randomUUID()
     val docxIdentifier = UUID.randomUUID()
     val metadataFileIdentifier = UUID.randomUUID()
-    val folderMetadata: String =
-      s"""identifier,parentPath,name,title
-         |$folderIdentifier,,TestName,TestTitle""".stripMargin
-
-    val assetMetadata: String =
-      s"""identifier,parentPath,title
-         |$assetIdentifier,$folderIdentifier,TestAssetTitle""".stripMargin
-
-    val fileMetadata: String =
-      s"""identifier,parentPath,name,fileSize,title
-         |$docxIdentifier,$folderIdentifier/$assetIdentifier,Test.docx,1,TestTitle
-         |$metadataFileIdentifier,$folderIdentifier/$assetIdentifier,TEST-metadata.json,2,
-         |""".stripMargin
+    val metadata =
+      s"""[{"id":"$folderIdentifier","parentId":null,"title":"TestTitle","type":"ArchiveFolder","name":"TestName","fileSize":null, "customMetadataAttribute2": "customMetadataValue2"},
+        |{"id":"$assetIdentifier","parentId":"$folderIdentifier","title":"TestAssetTitle","type":"Asset","name":"TestAssetName","fileSize":null},
+        |{"id":"$docxIdentifier","parentId":"$assetIdentifier","title":"Test","type":"File","name":"Test.docx","fileSize":1, "customMetadataAttribute1": "customMetadataValue1"},
+        |{"id":"$metadataFileIdentifier","parentId":"$assetIdentifier","title":"","type":"File","name":"TEST-metadata.json","fileSize":2}]
+        |""".stripMargin.replaceAll("\n", "")
 
     val manifestData: String =
       s"""checksumdocx data/$docxIdentifier
          |checksummetadata data/$metadataFileIdentifier
          |""".stripMargin
 
-    stubNetworkRequests(dynamoTable, folderMetadata, assetMetadata, fileMetadata, manifestData)
+    stubNetworkRequests(dynamoTable, metadata, manifestData)
     (folderIdentifier, assetIdentifier, docxIdentifier, metadataFileIdentifier)
   }
 
   private def stubInvalidNetworkRequests(dynamoTable: String = "test"): Unit = {
-    val folderMetadata: String =
-      s"""invalidFolder,headers
-         |invalid,values""".stripMargin
-
-    val assetMetadata: String =
-      s"""invalidAsset,headers
-         |invalid,values""".stripMargin
-
-    val fileMetadata: String =
-      s"""invalidFile,headers
-         |invalid,values""".stripMargin
+    val metadata: String = "{}"
 
     val manifestData: String = ""
 
-    stubNetworkRequests(dynamoTable, folderMetadata, assetMetadata, fileMetadata, manifestData)
+    stubNetworkRequests(dynamoTable, metadata, manifestData)
   }
 
-  private def stubNetworkRequests(dynamoTableName: String = "test", folderMetadata: String, assetMetadata: String, fileMetadata: String, manifestData: String): Unit = {
+  private def stubNetworkRequests(dynamoTableName: String = "test", metadata: String, manifestData: String): Unit = {
     dynamoServer.stubFor(
       post(urlEqualTo("/"))
         .withRequestBody(matchingJsonPath("$.RequestItems", containing(dynamoTableName)))
@@ -144,9 +93,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     )
 
     List(
-      ("folder-metadata.csv", folderMetadata),
-      ("asset-metadata.csv", assetMetadata),
-      ("file-metadata.csv", fileMetadata),
+      ("metadata.json", metadata),
       ("manifest-sha256.txt", manifestData)
     ).map { case (name, responseCsv) =>
       s3Server.stubFor(
@@ -186,17 +133,23 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
   }
 
   private def checkDynamoItems(tableRequestItems: List[DynamoTableItem], expectedTable: DynamoTable) = {
-    val items = tableRequestItems.filter(_.PutRequest.Item.id.S == expectedTable.id.toString).map(_.PutRequest.Item)
+    val items = tableRequestItems
+      .filter(_.PutRequest.Item.items("id").asInstanceOf[DynamoSRequestField].S == expectedTable.id.toString)
+      .map(_.PutRequest.Item)
     items.size should equal(1)
-    val item = items.head
-    item.id.S should equal(expectedTable.id.toString)
-    item.name.S should equal(expectedTable.name)
-    item.title.S should equal(expectedTable.title)
-    item.parentPath.S should equal(expectedTable.parentPath)
-    item.batchId.S should equal(expectedTable.batchId)
-    item.description.S should equal(expectedTable.description)
-    item.fileSize.map(_.N) should equal(expectedTable.fileSize)
-    item.`type`.S should equal(expectedTable.`type`.toString)
+    val item = items.head.items
+    def strOpt(name: String) = item.get(name).map(_.asInstanceOf[DynamoSRequestField].S)
+    def str(name: String) = strOpt(name).getOrElse("")
+    str("id") should equal(expectedTable.id.toString)
+    str("name") should equal(expectedTable.name)
+    str("title") should equal(expectedTable.title)
+    str("parentPath") should equal(expectedTable.parentPath)
+    str("batchId") should equal(expectedTable.batchId)
+    str("description") should equal(expectedTable.description)
+    item.get("fileSize").map(_.asInstanceOf[DynamoNRequestField].N) should equal(expectedTable.fileSize)
+    str("type") should equal(expectedTable.`type`.toString)
+    strOpt("customMetadataAttribute1") should equal(expectedTable.customMetadataAttribute1)
+    strOpt("customMetadataAttribute2") should equal(expectedTable.customMetadataAttribute2)
   }
 
   case class IngestMapperTest() extends Lambda {
@@ -223,11 +176,11 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
     val os = new ByteArrayOutputStream()
     IngestMapperTest().handleRequest(defaultInputStream, os, null)
-    val stateData = read[StateData](os.toByteArray.map(_.toChar).mkString)
+    val stateData = read[StateOutput](os.toByteArray.map(_.toChar).mkString)
     val archiveFolders = stateData.archiveHierarchyFolders
     archiveFolders.size should be(3)
     archiveFolders.contains(folderIdentifier) should be(true)
-    archiveFolders.containsSlice(uuids.map(UUID.fromString)) should be(true)
+    List(folderIdentifier, UUID.fromString(uuids.tail.head), UUID.fromString(uuids.head)).equals(archiveFolders) should be(true)
 
     stateData.contentFolders.isEmpty should be(true)
 
@@ -244,13 +197,41 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     val tableRequestItems = dynamoRequestBodies.head.RequestItems.test
 
     tableRequestItems.length should equal(6)
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", Folder, "Test Title A", "TestDescriptionA with 0"))
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", Folder, "Test Title A 1", "TestDescriptionA 1 with 0"))
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", folderIdentifier, s"${uuids.head}/${uuids.tail.head}", "TestName", Folder, "TestTitle", ""))
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetTitle", Asset, "", ""))
+    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", ArchiveFolder, "Test Title A", "TestDescriptionA with 0"))
     checkDynamoItems(
       tableRequestItems,
-      DynamoTable("TEST", docxIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier/$assetIdentifier", "Test.docx", File, "TestTitle", "", Option(1))
+      DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", ArchiveFolder, "Test Title A 1", "TestDescriptionA 1 with 0")
+    )
+    checkDynamoItems(
+      tableRequestItems,
+      DynamoTable(
+        "TEST",
+        folderIdentifier,
+        s"${uuids.head}/${uuids.tail.head}",
+        "TestName",
+        ArchiveFolder,
+        "TestTitle",
+        "",
+        customMetadataAttribute2 = Option("customMetadataValue2")
+      )
+    )
+    checkDynamoItems(
+      tableRequestItems,
+      DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetName", Asset, "TestAssetTitle", "")
+    )
+    checkDynamoItems(
+      tableRequestItems,
+      DynamoTable(
+        "TEST",
+        docxIdentifier,
+        s"${uuids.head}/${uuids.tail.head}/$folderIdentifier/$assetIdentifier",
+        "Test.docx",
+        File,
+        "Test",
+        "",
+        Option(1),
+        customMetadataAttribute1 = Option("customMetadataValue1")
+      )
     )
     checkDynamoItems(
       tableRequestItems,
@@ -316,6 +297,6 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
       IngestMapperTest().handleRequest(defaultInputStream, os, null)
     }
 
-    ex.getMessage should equal("unknown column name 'identifier' in line 2")
+    ex.getMessage should equal("Expected ujson.Arr (data: {})")
   }
 }
