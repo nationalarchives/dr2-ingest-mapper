@@ -55,7 +55,7 @@ class MetadataService(s3: DAS3Client[IO]) {
                     .getOrElse(Null)
                 else Null
               val metadataMap =
-                Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum" -> checksum, "fileExtension" -> fileExtension) ++ metadataEntry.obj.view
+                Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum_sha256" -> checksum, "fileExtension" -> fileExtension) ++ metadataEntry.obj.view
                   .filterKeys(_ != "parentId")
                   .toMap
               Obj.from(metadataMap)
