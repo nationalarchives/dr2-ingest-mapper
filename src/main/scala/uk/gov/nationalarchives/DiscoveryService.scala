@@ -54,10 +54,10 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
     for {
       response <- backend.send(request)
       body <- IO.fromEither(response.body)
-      asset <- IO.fromOption(body.assets.find(_.citableReference == citableReference))(
-        new Exception(s"Cannot find asset with citable reference $citableReference")
-      )
-      formattedAsset <- stripHtmlFromDiscoveryResponse(asset)
+      potentialAsset = body.assets.find(_.citableReference == citableReference)
+      formattedAsset <- potentialAsset.map(stripHtmlFromDiscoveryResponse).getOrElse {
+        IO(DiscoveryCollectionAsset(citableReference, DiscoveryScopeContent(""), citableReference))
+      }
     } yield formattedAsset
   }
 

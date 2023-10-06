@@ -25,8 +25,10 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     "41c5604d-70b3-44d1-aa1f-d9ffe18b33cb"
   )
 
-  val uuidsIterator: Iterator[String] = uuids.iterator
-  val uuidIterator: () => UUID = () => UUID.fromString(uuidsIterator.next())
+  val uuidIterator: () => UUID = () => {
+    val uuidsIterator: Iterator[String] = uuids.iterator
+    UUID.fromString(uuidsIterator.next())
+  }
 
   val baseUrl = "http://localhost"
   val bodyMap: Map[String, String] = List("T", "T TEST").map { col =>
@@ -54,15 +56,18 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     col -> body
   }.toMap
 
-  private def checkDynamoTable(table: Obj, collection: String, expectedId: String, parentPath: Option[String]): Assertion = {
+  private def checkDynamoTable(table: Obj, collection: String, expectedId: String, parentPath: Option[String], citableRefFound: Boolean = true): Assertion = {
+    val expectedTitle = if (citableRefFound) s"Test Title $collection" else collection
+    val expectedDescription = if (citableRefFound) s"TestDescription $collection 1          \nTestDescription $collection 2" else ""
+
     table("id").str should equal(expectedId)
     table("name").str should equal(collection)
-    table("title").str should equal(s"Test Title $collection")
+    table("title").str should equal(expectedTitle)
     table("batchId").str should equal("testBatch")
     table("type").str should equal("ArchiveFolder")
     !table.value.contains("fileSize") should be(true)
     table.value.get("parentPath").map(_.str) should equal(parentPath)
-    table("description").str should equal(s"TestDescription $collection 1          \nTestDescription $collection 2")
+    table("description").str should equal(expectedDescription)
   }
 
   "getDepartmentAndSeriesRows" should "return the correct values for series and department" in {
@@ -80,37 +85,43 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val series = result.series.head
 
     checkDynamoTable(department, "T", uuids.head, None)
-    checkDynamoTable(series, "T TEST", uuids.tail.head, Option(uuids.head))
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
-  "getDepartmentAndSeriesRows" should "return an error if the department reference doesn't match the input" in {
+  "getDepartmentAndSeriesRows" should "set the citable ref as the title and description as '', if the department reference doesn't match the input" in {
     val backend: SttpBackendStub[IO, Fs2Streams[IO]] = SttpBackendStub[IO, Fs2Streams[IO]](new CatsMonadError())
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/A"))
       .thenRespond(bodyMap("T"))
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/T TEST"))
       .thenRespond(bodyMap("T TEST"))
 
-    val ex = intercept[Exception] {
-      new DiscoveryService(baseUrl, backend, uuidIterator)
-        .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("A"), Option("T TEST")))
-        .unsafeRunSync()
-    }
-    ex.getMessage should equal("Cannot find asset with citable reference A")
+    val result = new DiscoveryService(baseUrl, backend, uuidIterator)
+      .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("A"), Option("T TEST")))
+      .unsafeRunSync()
+
+    val department = result.department
+    val series = result.series.head
+
+    checkDynamoTable(department, "A", uuids.head, None, citableRefFound = false)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
-  "getDepartmentAndSeriesRows" should "return an error if the series reference doesn't match the input" in {
+  "getDepartmentAndSeriesRows" should "set the citable ref as the title and description as '', if the series reference doesn't match the input" in {
     val backend: SttpBackendStub[IO, Fs2Streams[IO]] = SttpBackendStub[IO, Fs2Streams[IO]](new CatsMonadError())
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/T"))
       .thenRespond(bodyMap("T"))
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/A TEST"))
       .thenRespond(bodyMap("T TEST"))
 
-    val ex = intercept[Exception] {
-      new DiscoveryService(baseUrl, backend, uuidIterator)
-        .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("T"), Option("A TEST")))
-        .unsafeRunSync()
-    }
-    ex.getMessage should equal("Cannot find asset with citable reference A TEST")
+    val result = new DiscoveryService(baseUrl, backend, uuidIterator)
+      .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("T"), Option("A TEST")))
+      .unsafeRunSync()
+
+    val department = result.department
+    val series = result.series.head
+
+    checkDynamoTable(department, "T", uuids.head, None)
+    checkDynamoTable(series, "A TEST", uuids.head, Option(uuids.head), citableRefFound = false)
   }
 
   "getDepartmentAndSeriesRows" should "return an error if the discovery API returns an error" in {
