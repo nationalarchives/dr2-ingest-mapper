@@ -152,11 +152,13 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val result = new DiscoveryService(baseUrl, backend, uuidIterator)
       .getDepartmentAndSeriesRows(Input("testBatch", "", "", None, Option("T TEST")))
       .unsafeRunSync()
+
     result.series.isDefined should equal(true)
     val department = result.department
-    department("name").str should equal("Unknown")
-    !department.value.contains("title") should equal(true)
-    !department.value.contains("description") should equal(true)
+    val series = result.series.head
+
+    checkDynamoTable(department, "Unknown", uuids.head, None)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
   "getDepartmentAndSeriesRows" should "return a department and an empty series if the series is missing" in {
@@ -169,9 +171,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department("name").str should equal("T")
-    department("title").str should equal("Test Title T")
-    department("description").str should equal("TestDescription T 1          \nTestDescription T 2")
+    checkDynamoTable(department, "T", uuids.head, None)
   }
 
   "getDepartmentAndSeriesRows" should "return an unknown department if the series and department are missing" in {
@@ -182,9 +182,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department("name").str should equal("Unknown")
-    !department.value.contains("title") should equal(true)
-    !department.value.contains("description") should equal(true)
+    checkDynamoTable(department, "Unknown", uuids.head, None)
   }
 
 }
