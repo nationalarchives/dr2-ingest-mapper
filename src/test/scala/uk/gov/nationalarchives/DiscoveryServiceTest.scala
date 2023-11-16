@@ -12,6 +12,7 @@ import sttp.client3.impl.cats.CatsMonadError
 import sttp.client3.testing.SttpBackendStub
 import ujson.Obj
 import uk.gov.nationalarchives.Lambda.Input
+
 import java.util.UUID
 
 class DiscoveryServiceTest extends AnyFlatSpec {
@@ -62,12 +63,19 @@ class DiscoveryServiceTest extends AnyFlatSpec {
 
     table("id").str should equal(expectedId)
     table("name").str should equal(collection)
-    table("title").str should equal(expectedTitle)
     table("batchId").str should equal("testBatch")
     table("type").str should equal("ArchiveFolder")
     !table.value.contains("fileSize") should be(true)
     table.value.get("parentPath").map(_.str) should equal(parentPath)
-    table("description").str should equal(expectedDescription)
+    if (collection != "Unknown") {
+      table("title").str should equal(expectedTitle)
+      table("id_Code").str should equal(collection)
+      table("description").str should equal(expectedDescription)
+    } else {
+      table.value.contains("title") should equal(false)
+      table.value.contains("id_Code") should equal(false)
+      table.value.contains("description") should equal(false)
+    }
   }
 
   "getDepartmentAndSeriesRows" should "return the correct values for series and department" in {
@@ -178,4 +186,5 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     !department.value.contains("title") should equal(true)
     !department.value.contains("description") should equal(true)
   }
+
 }

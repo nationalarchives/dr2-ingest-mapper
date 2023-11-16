@@ -37,6 +37,7 @@ object TestUtils {
       `type`: Type,
       title: String,
       description: String,
+      id_Code: Option[String],
       fileSize: Option[Long] = None,
       checksumSha256: Option[String] = None,
       fileExtension: Option[String] = None,
