@@ -9,7 +9,7 @@ The lambda:
   "batchId": "batch",
   "s3Bucket": "bucket",
   "s3Prefix": "prefix/",
-  "department": "departmnet",
+  "department": "department",
   "series": "series"
 }
 ```

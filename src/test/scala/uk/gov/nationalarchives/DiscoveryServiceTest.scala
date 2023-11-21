@@ -12,6 +12,7 @@ import sttp.client3.impl.cats.CatsMonadError
 import sttp.client3.testing.SttpBackendStub
 import ujson.Obj
 import uk.gov.nationalarchives.Lambda.Input
+
 import java.util.UUID
 
 class DiscoveryServiceTest extends AnyFlatSpec {
@@ -62,12 +63,19 @@ class DiscoveryServiceTest extends AnyFlatSpec {
 
     table("id").str should equal(expectedId)
     table("name").str should equal(collection)
-    table("title").str should equal(expectedTitle)
     table("batchId").str should equal("testBatch")
     table("type").str should equal("ArchiveFolder")
     !table.value.contains("fileSize") should be(true)
     table.value.get("parentPath").map(_.str) should equal(parentPath)
-    table("description").str should equal(expectedDescription)
+    if (collection != "Unknown") {
+      table("title").str should equal(expectedTitle)
+      table("id_Code").str should equal(collection)
+      table("description").str should equal(expectedDescription)
+    } else {
+      table.value.contains("title") should equal(false)
+      table.value.contains("id_Code") should equal(false)
+      table.value.contains("description") should equal(false)
+    }
   }
 
   "getDepartmentAndSeriesRows" should "return the correct values for series and department" in {
@@ -144,11 +152,13 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val result = new DiscoveryService(baseUrl, backend, uuidIterator)
       .getDepartmentAndSeriesRows(Input("testBatch", "", "", None, Option("T TEST")))
       .unsafeRunSync()
+
     result.series.isDefined should equal(true)
     val department = result.department
-    department("name").str should equal("Unknown")
-    !department.value.contains("title") should equal(true)
-    !department.value.contains("description") should equal(true)
+    val series = result.series.head
+
+    checkDynamoTable(department, "Unknown", uuids.head, None)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
   "getDepartmentAndSeriesRows" should "return a department and an empty series if the series is missing" in {
@@ -161,9 +171,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department("name").str should equal("T")
-    department("title").str should equal("Test Title T")
-    department("description").str should equal("TestDescription T 1          \nTestDescription T 2")
+    checkDynamoTable(department, "T", uuids.head, None)
   }
 
   "getDepartmentAndSeriesRows" should "return an unknown department if the series and department are missing" in {
@@ -174,8 +182,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department("name").str should equal("Unknown")
-    !department.value.contains("title") should equal(true)
-    !department.value.contains("description") should equal(true)
+    checkDynamoTable(department, "Unknown", uuids.head, None)
   }
+
 }

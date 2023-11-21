@@ -143,6 +143,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     str("id") should equal(expectedTable.id.toString)
     str("name") should equal(expectedTable.name)
     str("title") should equal(expectedTable.title)
+    expectedTable.id_Code.map(id_Code => str("id_Code") should equal(id_Code))
     str("parentPath") should equal(expectedTable.parentPath)
     str("batchId") should equal(expectedTable.batchId)
     str("description") should equal(expectedTable.description)
@@ -197,10 +198,13 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     val tableRequestItems = dynamoRequestBodies.head.RequestItems.test
 
     tableRequestItems.length should equal(6)
-    checkDynamoItems(tableRequestItems, DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", ArchiveFolder, "Test Title A", "TestDescriptionA with 0"))
     checkDynamoItems(
       tableRequestItems,
-      DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", ArchiveFolder, "Test Title A 1", "TestDescriptionA 1 with 0")
+      DynamoTable("TEST", UUID.fromString(uuids.head), "", "A", ArchiveFolder, "Test Title A", "TestDescriptionA with 0", Some("A"))
+    )
+    checkDynamoItems(
+      tableRequestItems,
+      DynamoTable("TEST", UUID.fromString(uuids.tail.head), uuids.head, "A 1", ArchiveFolder, "Test Title A 1", "TestDescriptionA 1 with 0", Some("A 1"))
     )
     checkDynamoItems(
       tableRequestItems,
@@ -212,12 +216,13 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         ArchiveFolder,
         "TestTitle",
         "",
+        None,
         customMetadataAttribute2 = Option("customMetadataValue2")
       )
     )
     checkDynamoItems(
       tableRequestItems,
-      DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetName", Asset, "TestAssetTitle", "")
+      DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetName", Asset, "TestAssetTitle", "", None)
     )
     checkDynamoItems(
       tableRequestItems,
@@ -229,6 +234,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         File,
         "Test",
         "",
+        None,
         Option(1),
         customMetadataAttribute1 = Option("customMetadataValue1")
       )
@@ -243,6 +249,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         File,
         "",
         "",
+        None,
         Option(2),
         Option("checksum"),
         Option("txt")

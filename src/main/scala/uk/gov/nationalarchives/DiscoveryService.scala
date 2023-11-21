@@ -78,11 +78,12 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
     } yield {
       val departmentTableEntryMap = potentialDepartmentDiscoveryAsset
         .map(generateTableEntry)
+        .map(jsonMap => jsonMap ++ Map("id_Code" -> jsonMap("name")))
         .getOrElse(Map("batchId" -> Str(input.batchId), "id" -> Str(randomUuidGenerator().toString), "name" -> Str("Unknown"), "type" -> Str(ArchiveFolder.toString)))
 
       val seriesTableEntryOpt = potentialSeriesDiscoveryAsset
         .map(generateTableEntry)
-        .map(jsonMap => jsonMap ++ Map("parentPath" -> departmentTableEntryMap("id")))
+        .map(jsonMap => jsonMap ++ Map("parentPath" -> departmentTableEntryMap("id"), "id_Code" -> jsonMap("name")))
         .map(Obj.from)
 
       DepartmentAndSeriesTableData(Obj.from(departmentTableEntryMap), seriesTableEntryOpt)
