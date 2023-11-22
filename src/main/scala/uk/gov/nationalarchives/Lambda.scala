@@ -65,7 +65,8 @@ class Lambda extends RequestStreamHandler {
       discoveryService <- DiscoveryService(config.discoveryApiUrl, randomUuidGenerator)
       departmentAndSeries <- discoveryService.getDepartmentAndSeriesRows(input)
       bagManifests <- metadataService.parseBagManifest(input)
-      metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests)
+      bagInfoJson <- metadataService.parseBagInfoJson(input)
+      metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests, bagInfoJson.headOption.getOrElse(Obj()))
       _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
     } yield {
 

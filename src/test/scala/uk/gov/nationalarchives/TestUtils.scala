@@ -42,7 +42,8 @@ object TestUtils {
       checksumSha256: Option[String] = None,
       fileExtension: Option[String] = None,
       customMetadataAttribute1: Option[String] = None,
-      customMetadataAttribute2: Option[String] = None
+      customMetadataAttribute2: Option[String] = None,
+      attributeUniqueToBagInfo: Option[String] = None
   )
 
   case class DynamoItem(

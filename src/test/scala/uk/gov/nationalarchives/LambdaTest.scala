@@ -68,12 +68,15 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         |{"id":"$metadataFileIdentifier","parentId":"$assetIdentifier","title":"","type":"File","name":"TEST-metadata.json","fileSize":2}]
         |""".stripMargin.replaceAll("\n", "")
 
+    val bagInfoMetadata =
+      """{"customMetadataAttribute2": "customMetadataValueFromBagInfo","attributeUniqueToBagInfo": "bagInfoAttributeValue"}"""
+
     val manifestData: String =
       s"""checksumdocx data/$docxIdentifier
          |checksummetadata data/$metadataFileIdentifier
          |""".stripMargin
 
-    stubNetworkRequests(dynamoTable, metadata, manifestData)
+    stubNetworkRequests(dynamoTable, metadata, manifestData, bagInfoMetadata)
     (folderIdentifier, assetIdentifier, docxIdentifier, metadataFileIdentifier)
   }
 
@@ -82,10 +85,10 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
     val manifestData: String = ""
 
-    stubNetworkRequests(dynamoTable, metadata, manifestData)
+    stubNetworkRequests(dynamoTable, metadata, manifestData, "{}")
   }
 
-  private def stubNetworkRequests(dynamoTableName: String = "test", metadata: String, manifestData: String): Unit = {
+  private def stubNetworkRequests(dynamoTableName: String = "test", metadata: String, manifestData: String, bagInfoMetadata: String): Unit = {
     dynamoServer.stubFor(
       post(urlEqualTo("/"))
         .withRequestBody(matchingJsonPath("$.RequestItems", containing(dynamoTableName)))
@@ -94,6 +97,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
 
     List(
       ("metadata.json", metadata),
+      ("bag-info.json", bagInfoMetadata),
       ("manifest-sha256.txt", manifestData)
     ).map { case (name, responseCsv) =>
       s3Server.stubFor(
@@ -151,6 +155,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     str("type") should equal(expectedTable.`type`.toString)
     strOpt("customMetadataAttribute1") should equal(expectedTable.customMetadataAttribute1)
     strOpt("customMetadataAttribute2") should equal(expectedTable.customMetadataAttribute2)
+    strOpt("attributeUniqueToBagInfo") should equal(expectedTable.attributeUniqueToBagInfo)
   }
 
   case class IngestMapperTest() extends Lambda {
@@ -222,7 +227,18 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     )
     checkDynamoItems(
       tableRequestItems,
-      DynamoTable("TEST", assetIdentifier, s"${uuids.head}/${uuids.tail.head}/$folderIdentifier", "TestAssetName", Asset, "TestAssetTitle", "", None)
+      DynamoTable(
+        "TEST",
+        assetIdentifier,
+        s"${uuids.head}/${uuids.tail.head}/$folderIdentifier",
+        "TestAssetName",
+        Asset,
+        "TestAssetTitle",
+        "",
+        None,
+        customMetadataAttribute2 = Option("customMetadataValueFromBagInfo"),
+        attributeUniqueToBagInfo = Option("bagInfoAttributeValue")
+      )
     )
     checkDynamoItems(
       tableRequestItems,

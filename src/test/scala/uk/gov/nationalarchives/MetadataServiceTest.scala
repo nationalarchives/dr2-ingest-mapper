@@ -10,7 +10,7 @@ import org.scalatest.flatspec.AnyFlatSpec
 import org.scalatest.matchers.should.Matchers._
 import org.scalatest.prop.{TableDrivenPropertyChecks, TableFor2}
 import reactor.core.publisher.Flux
-import ujson.Obj
+import ujson._
 import uk.gov.nationalarchives.Lambda.Input
 import uk.gov.nationalarchives.MetadataService._
 import uk.gov.nationalarchives.TestUtils._
@@ -51,6 +51,7 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       row("type").str should equal(expectedTable.`type`.toString)
       row.value.get("checksumSha256").map(_.str) should equal(expectedTable.checksumSha256)
       row.value.get("fileExtension").flatMap(_.strOpt) should equal(expectedTable.fileExtension)
+      row.value.get("customMetadataAttribute1").flatMap(_.strOpt) should equal(expectedTable.customMetadataAttribute1)
     }
   }
 
@@ -115,9 +116,10 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
            |""".stripMargin.replaceAll("\n", "")
       val bagitManifests: List[BagitManifestRow] = List(BagitManifestRow("checksum-docx", fileIdOne.toString), BagitManifestRow("checksum-metadata", fileIdTwo.toString))
       val s3 = mockS3(metadata, "metadata.json")
+      val bagInfoJson = Obj(("customMetadataAttribute1", Value(Str("customMetadataAttributeValue"))))
       val input = Input(batchId, "bucket", "prefix/", Option("department"), Option("series"))
       val result =
-        new MetadataService(s3).parseMetadataJson(input, departmentAndSeries, bagitManifests).unsafeRunSync()
+        new MetadataService(s3).parseMetadataJson(input, departmentAndSeries, bagitManifests, bagInfoJson).unsafeRunSync()
 
       result.size should equal(5 + seriesIdOpt.size)
 
@@ -135,7 +137,21 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
         )
       )
       checkTableRows(result, List(folderId), DynamoTable(batchId, folderId, prefix, "TestName", ArchiveFolder, "TestTitle", "", None))
-      checkTableRows(result, List(assetId), DynamoTable(batchId, assetId, s"$prefix/$folderId", "TestAssetName", Asset, "TestAssetTitle", "", None))
+      checkTableRows(
+        result,
+        List(assetId),
+        DynamoTable(
+          batchId,
+          assetId,
+          s"$prefix/$folderId",
+          "TestAssetName",
+          Asset,
+          "TestAssetTitle",
+          "",
+          None,
+          customMetadataAttribute1 = Option("customMetadataAttributeValue")
+        )
+      )
       checkTableRows(
         result,
         List(fileIdOne),
