@@ -52,6 +52,8 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       row.value.get("checksumSha256").map(_.str) should equal(expectedTable.checksumSha256)
       row.value.get("fileExtension").flatMap(_.strOpt) should equal(expectedTable.fileExtension)
       row.value.get("customMetadataAttribute1").flatMap(_.strOpt) should equal(expectedTable.customMetadataAttribute1)
+      row.value.get("originalFiles").map(_.arr.toList).getOrElse(Nil).map(_.str) should equal(expectedTable.originalFiles)
+      row.value.get("originalMetadataFiles").map(_.arr.toList).getOrElse(Nil).map(_.str) should equal(expectedTable.originalMetadataFiles)
     }
   }
 
@@ -108,9 +110,11 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
       val departmentTable = table(departmentId, "department", "")
       val seriesTable = seriesIdOpt.map(id => table(id, "series", departmentId.toString))
       val departmentAndSeries = DepartmentAndSeriesTableData(departmentTable, seriesTable)
+      val originalFileId = UUID.randomUUID()
+      val originalMetadataFileId = UUID.randomUUID()
       val metadata =
         s"""[{"id":"$folderId","parentId":null,"title":"TestTitle","type":"ArchiveFolder","name":"TestName","fileSize":null},
-           |{"id":"$assetId","parentId":"$folderId","title":"TestAssetTitle","type":"Asset","name":"TestAssetName","fileSize":null},
+           |{"id":"$assetId","parentId":"$folderId","title":"TestAssetTitle","type":"Asset","name":"TestAssetName","fileSize":null, "originalFiles" : ["$originalFileId"], "originalMetadataFiles": ["$originalMetadataFileId"]},
            |{"id":"$fileIdOne","parentId":"$assetId","title":"Test","type":"File","name":"name.txt","fileSize":1, "checksumSha256": "name-checksum"},
            |{"id":"$fileIdTwo","parentId":"$assetId","title":"","type":"File","name":"TEST-metadata.json","fileSize":2, "checksumSha256": "metadata-checksum"}]
            |""".stripMargin.replaceAll("\n", "")
@@ -149,7 +153,9 @@ class MetadataServiceTest extends AnyFlatSpec with MockitoSugar with TableDriven
           "TestAssetTitle",
           "",
           None,
-          customMetadataAttribute1 = Option("customMetadataAttributeValue")
+          customMetadataAttribute1 = Option("customMetadataAttributeValue"),
+          originalFiles = List(originalFileId.toString),
+          originalMetadataFiles = List(originalMetadataFileId.toString)
         )
       )
       checkTableRows(

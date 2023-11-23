@@ -8,7 +8,7 @@ import org.scanamo._
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
-import ujson.{Null, Value, Obj, Str, Num}
+import ujson.{Arr, Null, Num, Obj, Str, Value}
 import uk.gov.nationalarchives.Lambda.{Config, Input, StateOutput}
 import uk.gov.nationalarchives.MetadataService._
 import upickle.default
@@ -48,12 +48,20 @@ class Lambda extends RequestStreamHandler {
     override def write(jsonObject: Obj): DynamoValue = {
       val dynamoValuesMap: Map[String, DynamoValue] = jsonObject.value.toMap.view
         .filterNot { case (_, value) => value.isNull }
-        .mapValues {
-          case Num(value) => DynamoValue.fromNumber[Long](value.toLong)
-          case s          => DynamoValue.fromString(s.str)
-        }
+        .mapValues(processValue)
         .toMap
       DynamoValue.fromDynamoObject(DynamoObject(dynamoValuesMap))
+    }
+  }
+
+  private def processValue(a: Value): DynamoValue = {
+    a match {
+      case Num(value) =>
+        DynamoValue.fromNumber[Long](value.toLong)
+      case Arr(arr) => DynamoValue.fromDynamoArray(DynamoArray(arr.map(processValue).toList))
+      case s =>
+        DynamoValue.fromString(s.str)
+
     }
   }
 

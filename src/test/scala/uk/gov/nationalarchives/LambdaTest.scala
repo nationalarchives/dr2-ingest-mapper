@@ -61,9 +61,21 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     val assetIdentifier = UUID.randomUUID()
     val docxIdentifier = UUID.randomUUID()
     val metadataFileIdentifier = UUID.randomUUID()
+    val originalFiles = List(UUID.randomUUID(), UUID.randomUUID()).map(_.toString)
+    val originalMetadataFiles = List(UUID.randomUUID(), UUID.randomUUID()).map(_.toString)
+
     val metadata =
       s"""[{"id":"$folderIdentifier","parentId":null,"title":"TestTitle","type":"ArchiveFolder","name":"TestName","fileSize":null, "customMetadataAttribute2": "customMetadataValue2"},
-        |{"id":"$assetIdentifier","parentId":"$folderIdentifier","title":"TestAssetTitle","type":"Asset","name":"TestAssetName","fileSize":null},
+        |{
+        | "id":"$assetIdentifier",
+        | "parentId":"$folderIdentifier",
+        | "title":"TestAssetTitle",
+        | "type":"Asset",
+        | "name":"TestAssetName",
+        | "fileSize":null,
+        | "originalFiles": ${write(originalFiles)},
+        | "originalMetadataFiles": ${write(originalMetadataFiles)}
+        |},
         |{"id":"$docxIdentifier","parentId":"$assetIdentifier","title":"Test","type":"File","name":"Test.docx","fileSize":1, "customMetadataAttribute1": "customMetadataValue1"},
         |{"id":"$metadataFileIdentifier","parentId":"$assetIdentifier","title":"","type":"File","name":"TEST-metadata.json","fileSize":2}]
         |""".stripMargin.replaceAll("\n", "")
@@ -77,7 +89,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
          |""".stripMargin
 
     stubNetworkRequests(dynamoTable, metadata, manifestData, bagInfoMetadata)
-    (folderIdentifier, assetIdentifier, docxIdentifier, metadataFileIdentifier)
+    (folderIdentifier, assetIdentifier, docxIdentifier, metadataFileIdentifier, originalFiles, originalMetadataFiles)
   }
 
   private def stubInvalidNetworkRequests(dynamoTable: String = "test"): Unit = {
@@ -142,6 +154,10 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
       .map(_.PutRequest.Item)
     items.size should equal(1)
     val item = items.head.items
+    def list(name: String): List[String] = item
+      .get(name)
+      .map(_.asInstanceOf[DynamoLRequestField].L)
+      .getOrElse(Nil)
     def strOpt(name: String) = item.get(name).map(_.asInstanceOf[DynamoSRequestField].S)
     def str(name: String) = strOpt(name).getOrElse("")
     str("id") should equal(expectedTable.id.toString)
@@ -156,6 +172,8 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     strOpt("customMetadataAttribute1") should equal(expectedTable.customMetadataAttribute1)
     strOpt("customMetadataAttribute2") should equal(expectedTable.customMetadataAttribute2)
     strOpt("attributeUniqueToBagInfo") should equal(expectedTable.attributeUniqueToBagInfo)
+    list("originalFiles") should equal(expectedTable.originalFiles)
+    list("originalMetadataFiles") should equal(expectedTable.originalMetadataFiles)
   }
 
   case class IngestMapperTest() extends Lambda {
@@ -178,7 +196,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     override val randomUuidGenerator: () => UUID = () => UUID.fromString(uuidsIterator.next())
   }
   "handleRequest" should "return the correct values from the lambda" in {
-    val (folderIdentifier, assetIdentifier, _, _) = stubValidNetworkRequests()
+    val (folderIdentifier, assetIdentifier, _, _, _, _) = stubValidNetworkRequests()
 
     val os = new ByteArrayOutputStream()
     IngestMapperTest().handleRequest(defaultInputStream, os, null)
@@ -195,7 +213,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
   }
 
   "handleRequest" should "write the correct values to dynamo" in {
-    val (folderIdentifier, assetIdentifier, docxIdentifier, metadataIdentifier) = stubValidNetworkRequests()
+    val (folderIdentifier, assetIdentifier, docxIdentifier, metadataIdentifier, originalFiles, originalMetadataFiles) = stubValidNetworkRequests()
     val os = new ByteArrayOutputStream()
     IngestMapperTest().handleRequest(defaultInputStream, os, null)
     val dynamoRequestBodies = dynamoServer.getAllServeEvents.asScala.map(e => read[DynamoRequestBody](e.getRequest.getBodyAsString))
@@ -237,7 +255,9 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
         "",
         None,
         customMetadataAttribute2 = Option("customMetadataValueFromBagInfo"),
-        attributeUniqueToBagInfo = Option("bagInfoAttributeValue")
+        attributeUniqueToBagInfo = Option("bagInfoAttributeValue"),
+        originalFiles = originalFiles,
+        originalMetadataFiles = originalMetadataFiles
       )
     )
     checkDynamoItems(

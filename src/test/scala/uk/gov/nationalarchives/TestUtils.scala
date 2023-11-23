@@ -12,6 +12,8 @@ object TestUtils {
     val items: Map[String, DynamoField] = json.value.toMap.view.mapValues { value =>
       if (value.obj.contains("S")) {
         DynamoSRequestField(value.obj("S").str)
+      } else if (value.obj.contains("L")) {
+        DynamoLRequestField(value.obj("L").arr.map(v => v("S").str).toList)
       } else {
         DynamoNRequestField(value.obj("N").str.toLong)
       }
@@ -24,6 +26,8 @@ object TestUtils {
   implicit val requestBodyReader: Reader[DynamoRequestBody] = macroR[DynamoRequestBody]
 
   trait DynamoField
+
+  case class DynamoLRequestField(L: List[String]) extends DynamoField
 
   case class DynamoSRequestField(S: String) extends DynamoField
 
@@ -43,7 +47,9 @@ object TestUtils {
       fileExtension: Option[String] = None,
       customMetadataAttribute1: Option[String] = None,
       customMetadataAttribute2: Option[String] = None,
-      attributeUniqueToBagInfo: Option[String] = None
+      attributeUniqueToBagInfo: Option[String] = None,
+      originalFiles: List[String] = Nil,
+      originalMetadataFiles: List[String] = Nil
   )
 
   case class DynamoItem(
