@@ -12,7 +12,7 @@ object Dependencies {
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % awsClientVersion
   lazy val dynamoClient = "uk.gov.nationalarchives" %% "da-dynamodb-client" % "0.1.17"
   lazy val scalaXml = "org.scala-lang.modules" %% "scala-xml" % "2.2.0"
-  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.12"
+  lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.29"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "2.27.2"
   lazy val sttp = "com.softwaremill.sttp.client3" %% "fs2" % "3.8.16"
   lazy val sttpUpickle = "com.softwaremill.sttp.client3" %% "upickle" % "3.8.16"
