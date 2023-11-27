@@ -3,21 +3,20 @@ package uk.gov.nationalarchives
 import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import com.amazonaws.services.lambda.runtime.{Context, RequestStreamHandler}
-import fs2.data.csv._
-import fs2.data.csv.generic.semiauto._
-import org.scanamo.{DynamoFormat, TypeCoercionError}
 import org.scanamo.generic.semiauto._
+import org.scanamo._
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
-import ujson.{Null, Value}
-import uk.gov.nationalarchives.Lambda.{Config, _}
+import ujson.{Null, Value, Obj, Str, Num}
+import uk.gov.nationalarchives.Lambda.{Config, Input, StateOutput}
 import uk.gov.nationalarchives.MetadataService._
 import upickle.default
 import upickle.default._
 
 import java.io.{InputStream, OutputStream}
 import java.util.UUID
+import scala.collection.mutable
 
 class Lambda extends RequestStreamHandler {
   val metadataService: MetadataService = MetadataService()
@@ -25,10 +24,6 @@ class Lambda extends RequestStreamHandler {
   val randomUuidGenerator: () => UUID = () => UUID.randomUUID()
 
   implicit val inputReader: Reader[Input] = macroR[Input]
-  implicit val folderMetadataRowDecoder: CsvRowDecoder[FolderMetadata, String] = deriveCsvRowDecoder
-  implicit val assetMetadataRowDecoder: CsvRowDecoder[AssetMetadata, String] = deriveCsvRowDecoder
-  implicit val fileMetadataRowDecoder: CsvRowDecoder[FileMetadata, String] = deriveCsvRowDecoder
-  implicit val bagManifestRowDecoder: RowDecoder[BagitManifest] = deriveRowDecoder
 
   implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
     case Null    => None
@@ -40,17 +35,27 @@ class Lambda extends RequestStreamHandler {
     case None        => Null
   }
 
-  implicit val typeFormat: Typeclass[Type] = DynamoFormat.xmap[Type, String](
-    {
-      case "Folder"   => Right(Folder)
-      case "Asset"    => Right(Asset)
-      case "File"     => Right(File)
-      case typeString => Left(TypeCoercionError(new Exception(s"Type $typeString not found")))
-    },
-    typeObject => typeObject.toString
-  )
+  implicit val dynamoTableFormat: Typeclass[Obj] = new Typeclass[Obj] {
+    override def read(dynamoValue: DynamoValue): Either[DynamoReadError, Obj] = {
+      dynamoValue.asObject
+        .map(_.toMap[String].map { valuesMap =>
+          val jsonValuesMap = valuesMap.view.mapValues(Str)
+          Obj(mutable.LinkedHashMap.newBuilder[String, Value].addAll(jsonValuesMap).result())
+        })
+        .getOrElse(Left(TypeCoercionError(new Exception("Dynamo object not found"))))
+    }
 
-  implicit val dynamoTableFormat: Typeclass[DynamoTable] = deriveDynamoFormat[DynamoTable]
+    override def write(jsonObject: Obj): DynamoValue = {
+      val dynamoValuesMap: Map[String, DynamoValue] = jsonObject.value.toMap.view
+        .filterNot { case (_, value) => value.isNull }
+        .mapValues {
+          case Num(value) => DynamoValue.fromNumber[Long](value.toLong)
+          case s          => DynamoValue.fromString(s.str)
+        }
+        .toMap
+      DynamoValue.fromDynamoObject(DynamoObject(dynamoValuesMap))
+    }
+  }
 
   override def handleRequest(inputStream: InputStream, outputStream: OutputStream, context: Context): Unit = {
     val inputString = inputStream.readAllBytes().map(_.toChar).mkString
@@ -59,23 +64,24 @@ class Lambda extends RequestStreamHandler {
       config <- ConfigSource.default.loadF[IO, Config]()
       discoveryService <- DiscoveryService(config.discoveryApiUrl, randomUuidGenerator)
       departmentAndSeries <- discoveryService.getDepartmentAndSeriesRows(input)
-      folderMetadata <- metadataService.parseCsvWithHeaders[FolderMetadata](input, "folder-metadata.csv")
-      assetMetadata <- metadataService.parseCsvWithHeaders[AssetMetadata](input, "asset-metadata.csv")
-      fileMetadata <- metadataService.parseCsvWithHeaders[FileMetadata](input, "file-metadata.csv")
-      bagManifests <- metadataService.parseCsvWithoutHeaders[BagitManifest](input, "manifest-sha256.txt")
-      entries <- metadataService.metadataToDynamoTables(input.batchId, departmentAndSeries, folderMetadata ++ assetMetadata ++ fileMetadata, bagManifests)
-      _ <- dynamo.writeItems(config.dynamoTableName, entries)
+      bagManifests <- metadataService.parseBagManifest(input)
+      metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests)
+      _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
     } yield {
-      val folderMetadataIdsWhereTitleAndNameNotSame: List[UUID] = folderMetadata.collect { case fm if fm.title != fm.name => fm.identifier }
-      val departmentAndSeriesIds: List[UUID] = departmentAndSeries.department.id :: departmentAndSeries.series.map(_.id).toList
 
-      val stateData = StateData(
+      val typeToId: Map[Type, List[UUID]] = metadataJson
+        .groupBy(jsonObj => typeFromString(jsonObj("type").str))
+        .view
+        .mapValues(_.map(jsonObj => UUID.fromString(jsonObj("id").str)))
+        .toMap
+
+      val stateData = StateOutput(
         input.batchId,
         input.s3Bucket,
         input.s3Prefix,
-        folderMetadataIdsWhereTitleAndNameNotSame ++ departmentAndSeriesIds,
-        folderMetadata.collect { case fm if fm.title == fm.name => fm.identifier },
-        assetMetadata.map(_.identifier)
+        typeToId.getOrElse(ArchiveFolder, Nil),
+        typeToId.getOrElse(ContentFolder, Nil),
+        typeToId.getOrElse(Asset, Nil)
       )
       outputStream.write(write(stateData).getBytes())
     }
@@ -83,8 +89,8 @@ class Lambda extends RequestStreamHandler {
 
 }
 object Lambda {
-  implicit val stateDataWriter: default.Writer[StateData] = macroW[StateData]
-  case class StateData(batchId: String, s3Bucket: String, s3Prefix: String, archiveHierarchyFolders: List[UUID], contentFolders: List[UUID], contentAssets: List[UUID])
+  implicit val stateDataWriter: default.Writer[StateOutput] = macroW[StateOutput]
+  case class StateOutput(batchId: String, s3Bucket: String, s3Prefix: String, archiveHierarchyFolders: List[UUID], contentFolders: List[UUID], contentAssets: List[UUID])
   case class Input(batchId: String, s3Bucket: String, s3Prefix: String, department: Option[String], series: Option[String])
   case class Config(dynamoTableName: String, discoveryApiUrl: String)
 }

@@ -10,8 +10,8 @@ import sttp.capabilities.fs2.Fs2Streams
 import sttp.client3.UriContext
 import sttp.client3.impl.cats.CatsMonadError
 import sttp.client3.testing.SttpBackendStub
+import ujson.Obj
 import uk.gov.nationalarchives.Lambda.Input
-import uk.gov.nationalarchives.MetadataService.DynamoTable
 
 import java.util.UUID
 
@@ -26,16 +26,18 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     "41c5604d-70b3-44d1-aa1f-d9ffe18b33cb"
   )
 
-  val uuidsIterator: Iterator[String] = uuids.iterator
-  val uuidIterator: () => UUID = () => UUID.fromString(uuidsIterator.next())
+  val uuidIterator: () => UUID = () => {
+    val uuidsIterator: Iterator[String] = uuids.iterator
+    UUID.fromString(uuidsIterator.next())
+  }
 
   val baseUrl = "http://localhost"
   val bodyMap: Map[String, String] = List("T", "T TEST").map { col =>
     val description = <scopecontent>
         <head>Head</head>
         <p><list>
-          <item>TestDescription {col} 1</item>
-          <item>TestDescription {col} 2</item></list>
+          <item>TestDescription {col} &#49;</item>
+          <item>TestDescription {col} &#50;</item></list>
         </p>
       </scopecontent>.toString().replaceAll("\n", "")
 
@@ -47,7 +49,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
          |      "scopeContent": {
          |        "description": "$description"
          |      },
-         |      "title": "<unittitle>Test Title $col</unittitle>"
+         |      "title": "<unittitle>Test \\\\Title $col</unittitle>"
          |    }
          |  ]
          |}
@@ -55,15 +57,25 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     col -> body
   }.toMap
 
-  private def checkDynamoTable(table: DynamoTable, collection: String, expectedId: String, parentPath: String): Assertion = {
-    table.id.toString should equal(expectedId)
-    table.name should equal(collection)
-    table.title should equal(s"Test Title $collection")
-    table.batchId should equal("testBatch")
-    table.`type`.toString should equal("Folder")
-    table.fileSize.isEmpty should be(true)
-    table.parentPath should equal(parentPath)
-    table.description should equal(s"TestDescription $collection 1          \nTestDescription $collection 2")
+  private def checkDynamoTable(table: Obj, collection: String, expectedId: String, parentPath: Option[String], citableRefFound: Boolean = true): Assertion = {
+    val expectedTitle = if (citableRefFound) s"Test Title $collection" else collection
+    val expectedDescription = if (citableRefFound) s"TestDescription $collection 1          \nTestDescription $collection 2" else ""
+
+    table("id").str should equal(expectedId)
+    table("name").str should equal(collection)
+    table("batchId").str should equal("testBatch")
+    table("type").str should equal("ArchiveFolder")
+    !table.value.contains("fileSize") should be(true)
+    table.value.get("parentPath").map(_.str) should equal(parentPath)
+    if (collection != "Unknown") {
+      table("title").str should equal(expectedTitle)
+      table("id_Code").str should equal(collection)
+      table("description").str should equal(expectedDescription)
+    } else {
+      table.value.contains("title") should equal(false)
+      table.value.contains("id_Code") should equal(false)
+      table.value.contains("description") should equal(false)
+    }
   }
 
   "getDepartmentAndSeriesRows" should "return the correct values for series and department" in {
@@ -80,38 +92,44 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val department = result.department
     val series = result.series.head
 
-    checkDynamoTable(department, "T", uuids.head, "")
-    checkDynamoTable(series, "T TEST", uuids.tail.head, uuids.head)
+    checkDynamoTable(department, "T", uuids.head, None)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
-  "getDepartmentAndSeriesRows" should "return an error if the department reference doesn't match the input" in {
+  "getDepartmentAndSeriesRows" should "set the citable ref as the title and description as '', if the department reference doesn't match the input" in {
     val backend: SttpBackendStub[IO, Fs2Streams[IO]] = SttpBackendStub[IO, Fs2Streams[IO]](new CatsMonadError())
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/A"))
       .thenRespond(bodyMap("T"))
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/T TEST"))
       .thenRespond(bodyMap("T TEST"))
 
-    val ex = intercept[Exception] {
-      new DiscoveryService(baseUrl, backend, uuidIterator)
-        .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("A"), Option("T TEST")))
-        .unsafeRunSync()
-    }
-    ex.getMessage should equal("Cannot find asset with citable reference A")
+    val result = new DiscoveryService(baseUrl, backend, uuidIterator)
+      .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("A"), Option("T TEST")))
+      .unsafeRunSync()
+
+    val department = result.department
+    val series = result.series.head
+
+    checkDynamoTable(department, "A", uuids.head, None, citableRefFound = false)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
-  "getDepartmentAndSeriesRows" should "return an error if the series reference doesn't match the input" in {
+  "getDepartmentAndSeriesRows" should "set the citable ref as the title and description as '', if the series reference doesn't match the input" in {
     val backend: SttpBackendStub[IO, Fs2Streams[IO]] = SttpBackendStub[IO, Fs2Streams[IO]](new CatsMonadError())
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/T"))
       .thenRespond(bodyMap("T"))
       .whenRequestMatches(_.uri.equals(uri"$baseUrl/API/records/v1/collection/A TEST"))
       .thenRespond(bodyMap("T TEST"))
 
-    val ex = intercept[Exception] {
-      new DiscoveryService(baseUrl, backend, uuidIterator)
-        .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("T"), Option("A TEST")))
-        .unsafeRunSync()
-    }
-    ex.getMessage should equal("Cannot find asset with citable reference A TEST")
+    val result = new DiscoveryService(baseUrl, backend, uuidIterator)
+      .getDepartmentAndSeriesRows(Input("testBatch", "", "", Option("T"), Option("A TEST")))
+      .unsafeRunSync()
+
+    val department = result.department
+    val series = result.series.head
+
+    checkDynamoTable(department, "T", uuids.head, None)
+    checkDynamoTable(series, "A TEST", uuids.head, Option(uuids.head), citableRefFound = false)
   }
 
   "getDepartmentAndSeriesRows" should "return an error if the discovery API returns an error" in {
@@ -134,11 +152,13 @@ class DiscoveryServiceTest extends AnyFlatSpec {
     val result = new DiscoveryService(baseUrl, backend, uuidIterator)
       .getDepartmentAndSeriesRows(Input("testBatch", "", "", None, Option("T TEST")))
       .unsafeRunSync()
+
     result.series.isDefined should equal(true)
     val department = result.department
-    department.name should equal("Unknown")
-    department.title should equal("")
-    department.description should equal("")
+    val series = result.series.head
+
+    checkDynamoTable(department, "Unknown", uuids.head, None)
+    checkDynamoTable(series, "T TEST", uuids.head, Option(uuids.head))
   }
 
   "getDepartmentAndSeriesRows" should "return a department and an empty series if the series is missing" in {
@@ -151,9 +171,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department.name should equal("T")
-    department.title should equal("Test Title T")
-    department.description should equal("TestDescription T 1          \nTestDescription T 2")
+    checkDynamoTable(department, "T", uuids.head, None)
   }
 
   "getDepartmentAndSeriesRows" should "return an unknown department if the series and department are missing" in {
@@ -164,8 +182,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
       .unsafeRunSync()
     result.series.isDefined should equal(false)
     val department = result.department
-    department.name should equal("Unknown")
-    department.title should equal("")
-    department.description should equal("")
+    checkDynamoTable(department, "Unknown", uuids.head, None)
   }
+
 }

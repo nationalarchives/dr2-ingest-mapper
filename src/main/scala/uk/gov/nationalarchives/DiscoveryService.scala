@@ -6,9 +6,10 @@ import sttp.capabilities.fs2.Fs2Streams
 import sttp.client3.httpclient.fs2.HttpClientFs2Backend
 import sttp.client3.upicklejson.asJson
 import sttp.client3.{SttpBackend, UriContext, basicRequest}
+import ujson._
 import uk.gov.nationalarchives.DiscoveryService._
 import uk.gov.nationalarchives.Lambda.Input
-import uk.gov.nationalarchives.MetadataService.{DepartmentAndSeriesTableData, DynamoTable, Folder}
+import uk.gov.nationalarchives.MetadataService._
 import upickle.default._
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
@@ -18,12 +19,17 @@ import javax.xml.transform.stream.{StreamResult, StreamSource}
 import scala.xml.XML
 
 class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Streams[IO]], randomUuidGenerator: () => UUID) {
-  private val folder = Folder
+
+  private def replaceHtmlCodesWithUnicodeChars(input: String) =
+    "&#[0-9]+".r.replaceAllIn(input, _.matched.drop(2).toInt.toChar.toString)
 
   private def stripHtmlFromDiscoveryResponse(discoveryAsset: DiscoveryCollectionAsset) = {
     val resources = for {
       xsltStream <- Resource.make(IO(getClass.getResourceAsStream("/transform.xsl")))(is => IO(is.close()))
-      inputStream <- Resource.make(IO(new ByteArrayInputStream(discoveryAsset.scopeContent.description.getBytes())))(is => IO(is.close()))
+      inputStream <- Resource.make {
+        val descriptionWithHtmlCodesReplaced = replaceHtmlCodesWithUnicodeChars(discoveryAsset.scopeContent.description)
+        IO(new ByteArrayInputStream(descriptionWithHtmlCodesReplaced.getBytes()))
+      }(is => IO(is.close()))
       outputStream <- Resource.make(IO(new ByteArrayOutputStream()))(bos => IO(bos.close()))
     } yield (xsltStream, inputStream, outputStream)
     resources.use {
@@ -48,27 +54,39 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
     for {
       response <- backend.send(request)
       body <- IO.fromEither(response.body)
-      asset <- IO.fromOption(body.assets.find(_.citableReference == citableReference))(
-        new Exception(s"Cannot find asset with citable reference $citableReference")
-      )
-      formattedAsset <- stripHtmlFromDiscoveryResponse(asset)
+      potentialAsset = body.assets.find(_.citableReference == citableReference)
+      formattedAsset <- potentialAsset.map(stripHtmlFromDiscoveryResponse).getOrElse {
+        IO(DiscoveryCollectionAsset(citableReference, DiscoveryScopeContent(""), citableReference))
+      }
     } yield formattedAsset
   }
 
   def getDepartmentAndSeriesRows(input: Input): IO[DepartmentAndSeriesTableData] = {
-    def tableEntry(asset: DiscoveryCollectionAsset) =
-      DynamoTable(input.batchId, randomUuidGenerator(), "", asset.citableReference, folder, asset.title, asset.scopeContent.description)
+    def generateTableEntry(asset: DiscoveryCollectionAsset): Map[String, Value] =
+      Map(
+        "batchId" -> Str(input.batchId),
+        "id" -> Str(randomUuidGenerator().toString),
+        "name" -> Str(asset.citableReference),
+        "type" -> Str(ArchiveFolder.toString),
+        "title" -> Str(asset.title),
+        "description" -> Str(asset.scopeContent.description)
+      )
+
     for {
-      departmentDiscoveryAsset <- input.department.map(getAssetFromDiscoveryApi).sequence
-      seriesDiscoveryAsset <- input.series.map(getAssetFromDiscoveryApi).sequence
+      potentialDepartmentDiscoveryAsset <- input.department.map(getAssetFromDiscoveryApi).sequence
+      potentialSeriesDiscoveryAsset <- input.series.map(getAssetFromDiscoveryApi).sequence
     } yield {
-      val departmentTableEntry = departmentDiscoveryAsset
-        .map(tableEntry)
-        .getOrElse(DynamoTable(input.batchId, randomUuidGenerator(), "", "Unknown", folder, "", ""))
-      val seriesTableEntryOpt = seriesDiscoveryAsset
-        .map(tableEntry)
-        .map(_.copy(parentPath = departmentTableEntry.id.toString))
-      DepartmentAndSeriesTableData(departmentTableEntry, seriesTableEntryOpt)
+      val departmentTableEntryMap = potentialDepartmentDiscoveryAsset
+        .map(generateTableEntry)
+        .map(jsonMap => jsonMap ++ Map("id_Code" -> jsonMap("name")))
+        .getOrElse(Map("batchId" -> Str(input.batchId), "id" -> Str(randomUuidGenerator().toString), "name" -> Str("Unknown"), "type" -> Str(ArchiveFolder.toString)))
+
+      val seriesTableEntryOpt = potentialSeriesDiscoveryAsset
+        .map(generateTableEntry)
+        .map(jsonMap => jsonMap ++ Map("parentPath" -> departmentTableEntryMap("id"), "id_Code" -> jsonMap("name")))
+        .map(Obj.from)
+
+      DepartmentAndSeriesTableData(Obj.from(departmentTableEntryMap), seriesTableEntryOpt)
     }
   }
 }
