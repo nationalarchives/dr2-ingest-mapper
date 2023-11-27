@@ -26,13 +26,13 @@ lazy val root = (project in file(".")).
       wiremock % Test
     )
   )
+)
 (assembly / assemblyJarName) := "dr2-ingest-mapper.jar"
 
 scalacOptions ++= Seq("-Wunused:imports", "-Werror")
-ThisBuild/scalacOptions ++= Seq("-unchecked", "-deprecation")
+ThisBuild / scalacOptions ++= Seq("-unchecked", "-deprecation")
 
 (assembly / assemblyMergeStrategy) := {
-  case PathList(ps@_*) if ps.last == "Log4j2Plugins.dat" => log4j2MergeStrategy
-  case _ => MergeStrategy.first
+  case PathList(ps @ _*) if ps.last == "Log4j2Plugins.dat" => log4j2MergeStrategy
+  case _                                                   => MergeStrategy.first
 }
-
