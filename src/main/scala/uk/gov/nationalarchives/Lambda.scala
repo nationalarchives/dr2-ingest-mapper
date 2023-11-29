@@ -48,17 +48,17 @@ class Lambda extends RequestStreamHandler {
     override def write(jsonObject: Obj): DynamoValue = {
       val dynamoValuesMap: Map[String, DynamoValue] = jsonObject.value.toMap.view
         .filterNot { case (_, value) => value.isNull }
-        .mapValues(processValue)
+        .mapValues(processDynamoValue)
         .toMap
       DynamoValue.fromDynamoObject(DynamoObject(dynamoValuesMap))
     }
   }
 
-  private def processValue(a: Value): DynamoValue = {
-    a match {
+  private def processDynamoValue(dynamoValue: Value): DynamoValue = {
+    dynamoValue match {
       case Num(value) =>
         DynamoValue.fromNumber[Long](value.toLong)
-      case Arr(arr) => DynamoValue.fromDynamoArray(DynamoArray(arr.map(processValue).toList))
+      case Arr(arr) => DynamoValue.fromDynamoArray(DynamoArray(arr.map(processDynamoValue).toList))
       case s =>
         DynamoValue.fromString(s.str)
 

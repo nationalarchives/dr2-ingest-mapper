@@ -56,11 +56,7 @@ class MetadataService(s3: DAS3Client[IO]) {
                     .map(Str)
                     .getOrElse(Null)
                 else Null
-              val metadataFromBagInfo: Obj = if (metadataEntry("type").str == "Asset") {
-                bagInfoJson
-              } else {
-                Obj()
-              }
+              val metadataFromBagInfo: Obj = if (metadataEntry("type").str == "Asset") bagInfoJson else Obj()
               val metadataMap =
                 Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum_sha256" -> checksum, "fileExtension" -> fileExtension) ++ metadataEntry.obj.view
                   .filterKeys(_ != "parentId")

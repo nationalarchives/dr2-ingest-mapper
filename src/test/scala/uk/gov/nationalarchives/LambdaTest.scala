@@ -153,12 +153,12 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
       .filter(_.PutRequest.Item.items("id").asInstanceOf[DynamoSRequestField].S == expectedTable.id.toString)
       .map(_.PutRequest.Item)
     items.size should equal(1)
-    val item = items.head.items
-    def list(name: String): List[String] = item
+    val dynamoFieldItems = items.head.items
+    def list(name: String): List[String] = dynamoFieldItems
       .get(name)
       .map(_.asInstanceOf[DynamoLRequestField].L)
       .getOrElse(Nil)
-    def strOpt(name: String) = item.get(name).map(_.asInstanceOf[DynamoSRequestField].S)
+    def strOpt(name: String) = dynamoFieldItems.get(name).map(_.asInstanceOf[DynamoSRequestField].S)
     def str(name: String) = strOpt(name).getOrElse("")
     str("id") should equal(expectedTable.id.toString)
     str("name") should equal(expectedTable.name)
@@ -167,7 +167,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
     str("parentPath") should equal(expectedTable.parentPath)
     str("batchId") should equal(expectedTable.batchId)
     str("description") should equal(expectedTable.description)
-    item.get("fileSize").map(_.asInstanceOf[DynamoNRequestField].N) should equal(expectedTable.fileSize)
+    dynamoFieldItems.get("fileSize").map(_.asInstanceOf[DynamoNRequestField].N) should equal(expectedTable.fileSize)
     str("type") should equal(expectedTable.`type`.toString)
     strOpt("customMetadataAttribute1") should equal(expectedTable.customMetadataAttribute1)
     strOpt("customMetadataAttribute2") should equal(expectedTable.customMetadataAttribute2)
