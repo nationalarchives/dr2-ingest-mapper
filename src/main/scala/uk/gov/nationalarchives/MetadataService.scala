@@ -28,7 +28,9 @@ class MetadataService(s3: DAS3Client[IO]) {
     }
   }
 
-  def parseMetadataJson(input: Input, departmentAndSeries: DepartmentAndSeriesTableData, bagitManifests: List[BagitManifestRow]): IO[List[Obj]] = {
+  def parseBagInfoJson(input: Input): IO[List[Obj]] = parseFileFromS3(input, "bag-info.json", _.map(bagInfoJson => Obj.from(read(bagInfoJson).obj)))
+
+  def parseMetadataJson(input: Input, departmentAndSeries: DepartmentAndSeriesTableData, bagitManifests: List[BagitManifestRow], bagInfoJson: Obj): IO[List[Obj]] = {
     parseFileFromS3(
       input,
       "metadata.json",
@@ -54,11 +56,12 @@ class MetadataService(s3: DAS3Client[IO]) {
                     .map(Str)
                     .getOrElse(Null)
                 else Null
+              val metadataFromBagInfo: Obj = if (metadataEntry("type").str == "Asset") bagInfoJson else Obj()
               val metadataMap =
                 Map("batchId" -> Str(input.batchId), "parentPath" -> Str(path), "checksum_sha256" -> checksum, "fileExtension" -> fileExtension) ++ metadataEntry.obj.view
                   .filterKeys(_ != "parentId")
                   .toMap
-              Obj.from(metadataMap)
+              Obj.from(metadataFromBagInfo.value ++ metadataMap)
             } ++ departmentAndSeries.series.toList ++ List(departmentAndSeries.department)
           }
         }

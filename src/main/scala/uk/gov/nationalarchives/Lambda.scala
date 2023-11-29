@@ -8,7 +8,7 @@ import org.scanamo._
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
-import ujson.{Null, Value, Obj, Str, Num}
+import ujson.{Arr, Null, Num, Obj, Str, Value}
 import uk.gov.nationalarchives.Lambda.{Config, Input, StateOutput}
 import uk.gov.nationalarchives.MetadataService._
 import upickle.default
@@ -48,12 +48,20 @@ class Lambda extends RequestStreamHandler {
     override def write(jsonObject: Obj): DynamoValue = {
       val dynamoValuesMap: Map[String, DynamoValue] = jsonObject.value.toMap.view
         .filterNot { case (_, value) => value.isNull }
-        .mapValues {
-          case Num(value) => DynamoValue.fromNumber[Long](value.toLong)
-          case s          => DynamoValue.fromString(s.str)
-        }
+        .mapValues(processDynamoValue)
         .toMap
       DynamoValue.fromDynamoObject(DynamoObject(dynamoValuesMap))
+    }
+  }
+
+  private def processDynamoValue(dynamoValue: Value): DynamoValue = {
+    dynamoValue match {
+      case Num(value) =>
+        DynamoValue.fromNumber[Long](value.toLong)
+      case Arr(arr) => DynamoValue.fromDynamoArray(DynamoArray(arr.map(processDynamoValue).toList))
+      case s =>
+        DynamoValue.fromString(s.str)
+
     }
   }
 
@@ -65,7 +73,8 @@ class Lambda extends RequestStreamHandler {
       discoveryService <- DiscoveryService(config.discoveryApiUrl, randomUuidGenerator)
       departmentAndSeries <- discoveryService.getDepartmentAndSeriesRows(input)
       bagManifests <- metadataService.parseBagManifest(input)
-      metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests)
+      bagInfoJson <- metadataService.parseBagInfoJson(input)
+      metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests, bagInfoJson.headOption.getOrElse(Obj()))
       _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
     } yield {
 
