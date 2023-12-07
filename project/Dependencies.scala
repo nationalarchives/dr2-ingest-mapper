@@ -1,7 +1,7 @@
 import sbt._
 object Dependencies {
   lazy val logbackVersion = "2.22.0"
-  lazy val awsClientVersion = "0.1.28"
+  lazy val awsClientVersion = "0.1.29"
   lazy val fs2Reactive = "co.fs2" %% "fs2-reactive-streams" % "3.9.3"
 
   lazy val log4jSlf4j = "org.apache.logging.log4j" % "log4j-slf4j-impl" % logbackVersion
@@ -11,7 +11,7 @@ object Dependencies {
   lazy val pureConfigCats = "com.github.pureconfig" %% "pureconfig-cats-effect" % "0.17.4"
   lazy val pureConfig = "com.github.pureconfig" %% "pureconfig" % "0.17.4"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % awsClientVersion
-  lazy val dynamoClient = "uk.gov.nationalarchives" %% "da-dynamodb-client" % "0.1.28"
+  lazy val dynamoClient = "uk.gov.nationalarchives" %% "da-dynamodb-client" % "0.1.29"
   lazy val scalaXml = "org.scala-lang.modules" %% "scala-xml" % "2.2.0"
   lazy val mockito = "org.mockito" %% "mockito-scala" % "1.17.30"
   lazy val wiremock = "com.github.tomakehurst" % "wiremock" % "3.0.1"
