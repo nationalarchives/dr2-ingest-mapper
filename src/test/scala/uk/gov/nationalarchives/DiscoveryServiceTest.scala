@@ -49,7 +49,7 @@ class DiscoveryServiceTest extends AnyFlatSpec {
          |      "scopeContent": {
          |        "description": "$description"
          |      },
-         |      "title": "<unittitle>Test \\\\Title $col</unittitle>"
+         |      "title": "<unittitle type=&#34Title\\">Test \\\\Title $col</unittitle>"
          |    }
          |  ]
          |}

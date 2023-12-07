@@ -42,7 +42,8 @@ class DiscoveryService(discoveryBaseUrl: String, backend: SttpBackend[IO, Fs2Str
         transformer.transform(input, result)
         val newDescription = outputStream.toByteArray.map(_.toChar).mkString.trim
         val scopeContentWithNewDescription = discoveryAsset.scopeContent.copy(description = newDescription)
-        val titleWithoutBackslashes = XML.loadString(discoveryAsset.title.replaceAll("\\\\", "")).text
+        val titleWithoutHtmlCodes = replaceHtmlCodesWithUnicodeChars(discoveryAsset.title)
+        val titleWithoutBackslashes = XML.loadString(titleWithoutHtmlCodes.replaceAll("\\\\", "")).text
         IO(discoveryAsset.copy(scopeContent = scopeContentWithNewDescription, title = titleWithoutBackslashes)).handleError(_ => discoveryAsset)
       case _ => IO(discoveryAsset)
     }
