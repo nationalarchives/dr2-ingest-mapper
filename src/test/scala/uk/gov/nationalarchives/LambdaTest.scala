@@ -135,7 +135,7 @@ class LambdaTest extends AnyFlatSpec with MockitoSugar with BeforeAndAfterEach {
            |      "scopeContent": {
            |        "description": "<scopecontent><head>Head</head><p>TestDescription$col with &#48</p></scopecontent>"
            |      },
-           |      "title": "<unittitle>Test Title $col</unittitle>"
+           |      "title": "<unittitle type=&#34Title\\">Test Title $col</unittitle>"
            |    }
            |  ]
            |}
