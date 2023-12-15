@@ -22,8 +22,6 @@ The lambda:
 ```json
 {
   "batchId": "TDR-2023-ABC",
-  "rootPath": "s3://<env>-dr2-ingest-raw-cache/TDR-2023-ABC/",
-  "batchType": "courtDocument",
   "archiveHierarchyFolders": [
       "f0d3d09a-5e3e-42d0-8c0d-3b2202f0e176",
       "e88e433a-1f3e-48c5-b15f-234c0e663c27",
