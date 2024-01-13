@@ -19,7 +19,7 @@ lazy val root = (project in file(".")).settings(
     scalaXml,
     sttp,
     sttpUpickle,
-    "io.projectreactor" % "reactor-test" % "3.6.1" % Test,
+    "io.projectreactor" % "reactor-test" % "3.6.2" % Test,
     scalaTest % Test,
     mockito % Test,
     wiremock % Test
