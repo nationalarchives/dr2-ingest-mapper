@@ -85,9 +85,8 @@ class Lambda extends RequestStreamHandler {
       bagManifests <- metadataService.parseBagManifest(input)
       bagInfoJson <- metadataService.parseBagInfoJson(input)
       metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests, bagInfoJson.headOption.getOrElse(Obj()))
-      fileReference = metadataJson.flatMap(_.value.get("BornDigitalRef")).headOption.map(_.str).orNull
       _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
-      _ <- logger.info(logCtx ++ Map("fileReference" -> fileReference))("Metadata written to dynamo db")
+      _ <- log("Metadata written to dynamo db")
     } yield {
 
       val typeToId: Map[Type, List[UUID]] = metadataJson
