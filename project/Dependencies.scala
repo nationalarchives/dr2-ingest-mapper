@@ -8,8 +8,8 @@ object Dependencies {
   lazy val log4jCore = "org.apache.logging.log4j" % "log4j-core" % logbackVersion
   lazy val log4jTemplateJson = "org.apache.logging.log4j" % "log4j-layout-template-json" % logbackVersion
   lazy val lambdaCore = "com.amazonaws" % "aws-lambda-java-core" % "1.2.3"
-  lazy val pureConfigCats = "com.github.pureconfig" %% "pureconfig-cats-effect" % "0.17.4"
-  lazy val pureConfig = "com.github.pureconfig" %% "pureconfig" % "0.17.4"
+  lazy val pureConfigCats = "com.github.pureconfig" %% "pureconfig-cats-effect" % "0.17.5"
+  lazy val pureConfig = "com.github.pureconfig" %% "pureconfig" % "0.17.5"
   lazy val s3Client = "uk.gov.nationalarchives" %% "da-s3-client" % awsClientVersion
   lazy val dynamoClient = "uk.gov.nationalarchives" %% "da-dynamodb-client" % awsClientVersion
   lazy val scalaXml = "org.scala-lang.modules" %% "scala-xml" % "2.2.0"
