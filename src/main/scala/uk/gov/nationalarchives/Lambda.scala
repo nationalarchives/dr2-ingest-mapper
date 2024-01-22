@@ -73,16 +73,20 @@ class Lambda extends RequestStreamHandler {
     val input = read[Input](inputString)
     for {
       config <- ConfigSource.default.loadF[IO, Config]()
-      log = logger.info(Map("batchRef" -> input.batchId))(_)
+      logCtx = Map("batchRef" -> input.batchId)
+      log = logger.info(logCtx)(_)
       _ <- log(s"Processing batchRef ${input.batchId}")
+
       discoveryService <- DiscoveryService(config.discoveryApiUrl, randomUuidGenerator)
       departmentAndSeries <- discoveryService.getDepartmentAndSeriesRows(input)
       _ <- log(s"Retrieved department and series ${departmentAndSeries.show}")
+
       bagManifests <- metadataService.parseBagManifest(input)
       bagInfoJson <- metadataService.parseBagInfoJson(input)
       metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests, bagInfoJson.headOption.getOrElse(Obj()))
+      fileReference = metadataJson.flatMap(_.value.get("BornDigitalRef")).headOption.map(_.str).orNull
       _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
-      _ <- log("Metadata written to dynamo db")
+      _ <- logger.info(logCtx ++ Map("fileReference" -> fileReference))("Metadata written to dynamo db")
     } yield {
 
       val typeToId: Map[Type, List[UUID]] = metadataJson
