@@ -5,7 +5,7 @@ import cats.effect.unsafe.implicits.global
 import com.amazonaws.services.lambda.runtime.{Context, RequestStreamHandler}
 import org.scanamo.generic.semiauto._
 import org.scanamo._
-import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.{LoggerName, SelfAwareStructuredLogger}
 import org.typelevel.log4cats.slf4j.Slf4jFactory
 import pureconfig._
 import pureconfig.generic.auto._
@@ -25,6 +25,7 @@ class Lambda extends RequestStreamHandler {
   val dynamo: DADynamoDBClient[IO] = DADynamoDBClient[IO]()
   val randomUuidGenerator: () => UUID = () => UUID.randomUUID()
 
+  implicit val loggerName: LoggerName = LoggerName("Ingest Mapper")
   private val logger: SelfAwareStructuredLogger[IO] = Slf4jFactory.create[IO].getLogger
   implicit val inputReader: Reader[Input] = macroR[Input]
 
