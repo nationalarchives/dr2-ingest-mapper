@@ -5,6 +5,8 @@ import cats.effect.unsafe.implicits.global
 import com.amazonaws.services.lambda.runtime.{Context, RequestStreamHandler}
 import org.scanamo.generic.semiauto._
 import org.scanamo._
+import org.typelevel.log4cats.SelfAwareStructuredLogger
+import org.typelevel.log4cats.slf4j.Slf4jFactory
 import pureconfig._
 import pureconfig.generic.auto._
 import pureconfig.module.catseffect.syntax._
@@ -23,6 +25,7 @@ class Lambda extends RequestStreamHandler {
   val dynamo: DADynamoDBClient[IO] = DADynamoDBClient[IO]()
   val randomUuidGenerator: () => UUID = () => UUID.randomUUID()
 
+  private val logger: SelfAwareStructuredLogger[IO] = Slf4jFactory.create[IO].getLogger
   implicit val inputReader: Reader[Input] = macroR[Input]
 
   implicit def OptionReader[T: Reader]: Reader[Option[T]] = reader[Value].map[Option[T]] {
@@ -70,12 +73,20 @@ class Lambda extends RequestStreamHandler {
     val input = read[Input](inputString)
     for {
       config <- ConfigSource.default.loadF[IO, Config]()
+      logCtx = Map("batchRef" -> input.batchId)
+      log = logger.info(logCtx)(_)
+      _ <- log(s"Processing batchRef ${input.batchId}")
+
       discoveryService <- DiscoveryService(config.discoveryApiUrl, randomUuidGenerator)
       departmentAndSeries <- discoveryService.getDepartmentAndSeriesRows(input)
+      _ <- log(s"Retrieved department and series ${departmentAndSeries.show}")
+
       bagManifests <- metadataService.parseBagManifest(input)
       bagInfoJson <- metadataService.parseBagInfoJson(input)
       metadataJson <- metadataService.parseMetadataJson(input, departmentAndSeries, bagManifests, bagInfoJson.headOption.getOrElse(Obj()))
+      fileReference = metadataJson.flatMap(_.value.get("BornDigitalRef")).headOption.map(_.str).orNull
       _ <- dynamo.writeItems(config.dynamoTableName, metadataJson)
+      _ <- logger.info(logCtx ++ Map("fileReference" -> fileReference))("Metadata written to dynamo db")
     } yield {
 
       val typeToId: Map[Type, List[UUID]] = metadataJson
@@ -94,7 +105,9 @@ class Lambda extends RequestStreamHandler {
       )
       outputStream.write(write(stateData).getBytes())
     }
-  }.unsafeRunSync()
+  }.onError(logLambdaError).unsafeRunSync()
+
+  private def logLambdaError(error: Throwable): IO[Unit] = logger.error(error)("Error running court document event handler")
 
 }
 object Lambda {
