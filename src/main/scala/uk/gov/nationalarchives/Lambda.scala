@@ -69,10 +69,14 @@ class Lambda extends RequestStreamHandler {
     }
   }
 
-  override def handleRequest(inputStream: InputStream, outputStream: OutputStream, context: Context): Unit = {
+  private def parseInput(inputStream: InputStream): IO[Input] = IO {
     val inputString = inputStream.readAllBytes().map(_.toChar).mkString
-    val input = read[Input](inputString)
+    read[Input](inputString)
+  }
+
+  override def handleRequest(inputStream: InputStream, outputStream: OutputStream, context: Context): Unit = {
     for {
+      input <- parseInput(inputStream)
       config <- ConfigSource.default.loadF[IO, Config]()
       logCtx = Map("batchRef" -> input.batchId)
       log = logger.info(logCtx)(_)
