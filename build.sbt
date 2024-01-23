@@ -12,6 +12,8 @@ lazy val root = (project in file(".")).settings(
     log4jCore,
     log4jTemplateJson,
     lambdaCore,
+    log4CatsCore,
+    log4CatsSlf4j,
     pureConfig,
     pureConfigCats,
     s3Client,

@@ -133,7 +133,9 @@ object MetadataService {
 
   case class BagitManifestRow(checksum: String, filePath: String)
 
-  case class DepartmentAndSeriesTableData(department: Obj, series: Option[Obj])
+  case class DepartmentAndSeriesTableData(department: Obj, series: Option[Obj]) {
+    def show = s"Department: ${department.value.get("title").orNull} Series ${series.flatMap(_.value.get("title")).orNull}"
+  }
 
   def apply(): MetadataService = {
     val s3 = DAS3Client[IO]()
