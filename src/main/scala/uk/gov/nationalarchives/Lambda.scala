@@ -111,7 +111,7 @@ class Lambda extends RequestStreamHandler {
     }
   }.onError(logLambdaError).unsafeRunSync()
 
-  private def logLambdaError(error: Throwable): IO[Unit] = logger.error(error)("Error running court document event handler")
+  private def logLambdaError(error: Throwable): IO[Unit] = logger.error(error)("Error running ingest mapper")
 
 }
 object Lambda {
