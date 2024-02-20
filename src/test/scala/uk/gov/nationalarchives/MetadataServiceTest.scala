@@ -13,7 +13,7 @@ import reactor.core.publisher.Flux
 import ujson._
 import uk.gov.nationalarchives.Lambda.Input
 import uk.gov.nationalarchives.MetadataService._
-import uk.gov.nationalarchives.TestUtils._
+import uk.gov.nationalarchives.testUtils.TestUtils._
 
 import java.nio.ByteBuffer
 import java.util.UUID

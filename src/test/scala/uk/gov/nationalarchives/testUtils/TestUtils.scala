@@ -1,8 +1,8 @@
-package uk.gov.nationalarchives
+package uk.gov.nationalarchives.testUtils
 
-import upickle.default._
 import ujson.Obj
 import uk.gov.nationalarchives.MetadataService.Type
+import upickle.default._
 
 import java.util.UUID
 object TestUtils {
