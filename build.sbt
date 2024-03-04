@@ -7,6 +7,7 @@ ThisBuild / scalaVersion := "2.13.13"
 lazy val root = (project in file(".")).settings(
   name := "dr2-ingest-mapper",
   libraryDependencies ++= Seq(
+    awsCrt,
     fs2Reactive,
     log4jSlf4j,
     log4jCore,
